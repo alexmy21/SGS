@@ -66,7 +66,7 @@ module HllSets
     using SparseArrays
 
     export HllSet, add!, count, union, intersect, diff, 
-        isequal, isempty, id, delta, getbin, getzeros, maxidx, match, cosine, dump, restore,
+        isequal, isempty, id, delta, getbin, getzeros, maxidx, match, cosine, dump, restore
 
     struct HllSet{P} 
         counts::Vector{BitVector}

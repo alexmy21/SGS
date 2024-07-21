@@ -1,8 +1,8 @@
-include("hll_graph.jl")
+include("graph.jl")
 
 module Store 
 
-    using ..Graph
+    using ..HllGraph
     using ..Util
 
     using DataFrames: DataFrameRow
@@ -13,7 +13,7 @@ module Store
     #=============================================================================#
     # Assignment, Commit, Token
     #=============================================================================#
-    struct Assignment <: Graph.AbstractGraphType
+    struct Assignment <: HllGraph.AbstractGraphType
         id::String
         parent::String
         item::String
@@ -37,7 +37,7 @@ module Store
     args(b::Assignment) = (b.id, b.parent, b.item, b.a_type, b.processor_id, b.lock_uuid, b.status)
 
     #-----------------------------------------------------------------------------# Commit
-    struct Commit <: Graph.AbstractGraphType
+    struct Commit <: HllGraph.AbstractGraphType
         id::String
         committer_name::String
         committer_email::String
@@ -57,28 +57,7 @@ module Store
     end
 
     args(c::Commit) = (c.id, c.committer_name, c.committer_email, c.message, JSON3.write(c.props))
-        
-    #---------------------------------------------------------------------------- Token #
-    struct Token <: Graph.AbstractGraphType
-        id::Int
-        bin::Int
-        zeros::Int
-        token::Set{String}
-        tf::Int
-        refs::Set{String}
-    end
-
-    Token(id::Int, bin::Int, zeros::Int; token::String, tf::Int, refs::String) = 
-        Token(id, bin, zeros, token, tf, refs)
-    Token(row::DataFrameRow) = Token(row.id, row.bin, row.zeros, JSON3.read(row.token), row.tf, JSON3.read(row.refs))
-
-    function Base.show(io::IO, o::Token)
-        print(io, "Token($(o.id), $(o.bin), $(o.zeros), $(o.token), $(o.tf), $(o.refs))")
-    end
-
-    args(g::Token) = (g.id, g.bin, g.zeros, JSON3.write(collect(g.token)), g.tf, JSON3.write(collect(g.refs)))
-
-
+    
 
     #=============================================================================#
     # Store Util functions

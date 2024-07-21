@@ -418,7 +418,7 @@ module HllSets
     function Base.dump(x::HllSet{P}) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
-            error("We only have bias estimates for P ∈ 4:18")
+            error("We only have dump for P ∈ 4:18")
         end
         z = Vector{UInt64}(undef, length(x.counts))
         for i in 1:length(x.counts)
@@ -445,7 +445,7 @@ module HllSets
     function restore(z::HllSet{P}, x::Vector{UInt64}) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
-            error("We only have bias estimates for P ∈ 4:18")
+            error("We only have restore for P ∈ 4:18")
         end
         if length(x) != length(z.counts)
             error("The length of the vector must be equal to the length of the HllSet")
@@ -460,7 +460,7 @@ module HllSets
     function restore(z::HllSet{P}, x::String) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
-            error("We only have bias estimates for P ∈ 4:18")
+            error("We only have restore for P ∈ 4:18")
         end
         z_dump = sparsevec_from_string(x)
         return restore(x, Vector(z_dump))

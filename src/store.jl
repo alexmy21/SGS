@@ -63,13 +63,15 @@ module Store
     # Store Util functions
     #=============================================================================#
     function process_file(root, file, db, ext, P, column)
-        f_name = joinpath(root, file)
-        sha_1 = bytes2hex(sha1(f_name))
-        assign = Graph.Assignment(sha_1, root, f_name, ext, "book_file", "", "waiting")
-        Graph.replace!(db, assign)
-        dataset = [f_name, ext, root]
-        update_tokens(db, dataset, sha_1, P)
-        column && book_column(db, f_name, sha_1, P)
+        # TODO: Implement this function
+        #------------------------------
+        # f_name = joinpath(root, file)
+        # sha_1 = bytes2hex(sha1(f_name))
+        # assign = Store.Assignment(sha_1, root, f_name, ext, "book_file", "", "waiting")
+        # Graph.replace!(db, assign)
+        # dataset = [f_name, ext, root]
+        # update_tokens(db, dataset, sha_1, P)
+        # column && book_column(db, f_name, sha_1, P)
     end
 
     function process_directory(start_dir, db, ext, P, column)

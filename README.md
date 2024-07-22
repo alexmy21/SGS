@@ -8,7 +8,7 @@ It offers robust support for Julia, and the Jupyter Extension is particularly we
 Of course, you are free to select any IDE that suits your preferences.
 
 Project architecture include:
-- SGS as a Julia framework: Streamlining operations and maintaining our commitment to an embeddable framework.
+- SGS as a Julia framework: Streamlining operations and maintaining our commitment to an embeddable framework. 
 - Redis: Serving as a computational engine, database, and search engine, Redis complements the SGS framework like a trusted tool—indispensable but unobtrusive, much like a cellphone that, while not a part of you, is always by your side.
 
 ## Installing Julia

@@ -13,6 +13,6 @@ module Search
 
     export SearchIndex, SearchIndexRow, SearchIndexRowDict, SearchIndexRowRedis
 
-    
+    # TODO: Add a Redis implementation
 
 end

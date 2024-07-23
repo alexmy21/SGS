@@ -8,20 +8,21 @@
 
 
 
-Setting up development environment
+## Setting up development environment
+
 I have chosen Visual Studio Code as my preferred IDE for several reasons:
 It offers robust support for Julia, and the Jupyter Extension is particularly well-suited for handling Julia code. I find using notebooks as a testing environment to be especially convenient, at least from my perspective.
 Of course, you are free to select any IDE that suits your preferences.
 
-Project architecture include:
+### Project architecture include:
 - SGS as a Julia framework: Streamlining operations and maintaining our commitment to an embeddable framework. 
 - Redis: Serving as a computational engine, database, and search engine, Redis complements the SGS framework like a trusted tool—indispensable but unobtrusive, much like a cellphone that, while not a part of you, is always by your side.
 
-## Installing Julia
+### Installing Julia
 
 The most recommended method for installing Julia is by utilizing the official Julia packaging. As of now, I am running Julia version 1.10.4.
 
-## Installing Redis
+### Installing Redis
 
 I am utilizing the official Redis Docker image. For detailed guidance on how to use this image, please refer to the following article: [How to Use the Redis Docker Official Image](https://www.docker.com/blog/how-to-use-the-redis-docker-official-image/ ). 
 
@@ -33,11 +34,11 @@ This will install the Redis server and RedisInsight on port 8001. Once installed
 
  If you prefer using the REPL interface, you will need to install the Redis server locally, which includes the redis-cli tool for starting the REPL.
 
-## Cloning SGS project
+### Cloning SGS project
 
     git clone https://github.com/alexmy21/SGS.git
 
-## Open project in VS Code
+### Open project in VS Code
 
     cd SGS
     code .

@@ -323,7 +323,7 @@ We have added comments to certain fields in the schema to provide clarification.
 Executing a basic search query will retrieve all nodes:
 
     ft.search nodes * return 2 sha1 labels
-    
+
     1) "6"
     2) "b:n:b31793fa8c4efbbbe33c49c25c5d6da577b454a9"
     3) 1) "sha1"
@@ -380,7 +380,7 @@ Alternatively, the `RENAME` command allows for reassigning a hash to a different
 
 ## References
 
-https://www.cnbc.com/2022/09/21/why-elon-musk-says-patents-are-for-the-weak.html 
+1. https://www.cnbc.com/2022/09/21/why-elon-musk-says-patents-are-for-the-weak.html 
 
 
 ## Appendix

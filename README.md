@@ -2,7 +2,11 @@
 
 ## (Self-Generative Systems)
 
->This document provides a technical overview of the development process for the SGS project. For a more in-depth understanding of the project's evolution, we recommend reviewing the Introduction.md file.
+> This document provides a technical overview of the development process for the SGS project. For a more in-depth understanding of the project's evolution, we recommend reviewing the Introduction.md file.
+
+> Attention: This is a work in progress, with new chapters and editing to come.
+
+
 
 Setting up development environment
 I have chosen Visual Studio Code as my preferred IDE for several reasons:

@@ -186,7 +186,11 @@ module HllSets
         This function essentially extracts the `P + 1` most significant bits from `x` and returns them as an integer. 
         The `+ 1` is there to compensate for the fact that `BitVector` in Julia is of size 64.
     """
-    function getbin(hll::HllSet{P}, x::Int) where {P} 
+    function getbin(hll::HllSet{P}, x::Int) where {P}
+        return getbin(x, P=P)        
+    end
+
+    function getbin(x::Int; P::Int=10) 
         # Increasing P by 1 to compensate BitVector size that is of size 64
         x = x >>> (8 * sizeof(UInt) - (P + 1)) + 1
         str = replace(string(x, base = 16), "0x" => "")
@@ -194,6 +198,10 @@ module HllSets
     end
 
     function getzeros(hll::HllSet{P}, x::Int) where {P}
+        return getzeros(x, P=P)
+    end
+
+    function getzeros(x::Int; P::Int=10)
         or_mask = ((UInt(1) << P) - 1) << (8 * sizeof(UInt) - P)
         return trailing_zeros(x | or_mask) + 1
     end

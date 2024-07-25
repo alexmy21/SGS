@@ -88,6 +88,9 @@ This illustration serves as an informative infographic of the SGS data architect
 
 Examining the diagram might easily give the mistaken impression that we are dealing with at least three distinct types of hashes. However, structurally, all hashes are identical; we categorize them into three groups based on Redis's naming conventions for hash names. Each hash name supports a compound structure consisting of multiple parts divided by a colon (:), referred to as prefixes.
 
+The initial letter in the hash key (b for buffer, h for header, t for tail) denotes the life cycle stage of the specified node instance. As it transitions from one stage to the next, the node itself remains unchanged. In the SGS, while the names may alter, the values remain consistent.
+
+
 ### Utilizing Redis benefits
 
 RediSearch leverages Redis naming convention feature to associate search indices with Redis hashes. For instance, the index 'b:nodes' is defined by a schema that links to 'b:node' as a hash prefix. RediSearch monitors all newly created hashes and, if a hash starts with a prefix specified in any of the indices, it will link this hash to the relevant index.

@@ -12,33 +12,34 @@ module Util
         byte_array = ""
         for i in 1:length(data)
             byte_array *= string(Int32(data[i]), base=16, pad=4)
-        end 
-        # byte_array = reinterpret(UInt8, data)
-        println("to_blob: ", length(data), "; ", length(byte_array))
+        end        
+        # println("to_blob: ", length(data), "; ", length(byte_array))
         return byte_array
     end
 
-    function from_blob(blob::Vector{UInt8})
-        # if length(blob) % 8 != 0
-        #     println(length(blob))
-        #     throw(ArgumentError("Length of byte array must be a multiple of 8"))
-        # end
-        uint64_vector = reinterpret(UInt64, blob)
-        return uint64_vector
-    end
+    # TODO: need some work or just remove all of them
+    #-------------------------------------------------
+    # function from_blob(blob::Vector{UInt8})
+    #     # if length(blob) % 8 != 0
+    #     #     println(length(blob))
+    #     #     throw(ArgumentError("Length of byte array must be a multiple of 8"))
+    #     # end
+    #     uint64_vector = reinterpret(UInt64, blob)
+    #     return uint64_vector
+    # end
 
-    function from_blob(blob::AbstractString)        
-        _blob = Vector{UInt8}(codeunits(blob)) 
-        if length(_blob) % 8 != 0
-            println(length(blob))
-            parts = split(blob, ",")
-            println(length(parts))
-            println(_blob)
-            throw(ArgumentError("Length of byte array must be a multiple of 8"))
-        end       
-        uint64_vector = reinterpret(UInt64, _blob)
-        return uint64_vector
-    end
+    # function from_blob(blob::AbstractString)        
+    #     _blob = Vector{UInt8}(codeunits(blob)) 
+    #     if length(_blob) % 8 != 0
+    #         # println(length(blob))
+    #         # parts = split(blob, ",")
+    #         # println(length(parts))
+    #         # println(_blob)
+    #         throw(ArgumentError("Length of byte array must be a multiple of 8"))
+    #     end       
+    #     uint64_vector = reinterpret(UInt64, _blob)
+    #     return uint64_vector
+    # end
 
     function parse_uint8_array(str::AbstractString) :: Vector{UInt8}
         # Split the string on commas
@@ -47,24 +48,6 @@ module Util
         uint8_array = [parse(UInt8, part) for part in parts]
         return uint8_array
     end
-
-    # function to_byte_array(data::Vector{UInt64}) #::Vector{UInt8}
-    #     # Reinterpret the Vector{UInt64} as a Vector{UInt8}
-    #     # Since UInt64 is 8 bytes, this will keep the 8-byte representation for each UInt64 value
-    #     println(data)
-    #     byte_array = reinterpret(UInt8, data)
-    #     return byte_array
-    # end
-
-    # function to_uint64_vector(byte_array::Vector{UInt8}) #::Vector{UInt64}
-    #     # Ensure the byte array length is a multiple of 8
-    #     if length(byte_array) % 8 != 0
-    #         throw(ArgumentError("Length of byte array must be a multiple of 8"))
-    #     end
-    #     # Reinterpret the Vector{UInt8} as a Vector{UInt64}
-    #     uint64_vector = reinterpret(UInt64, byte_array)
-    #     return uint64_vector
-    # end
 
     function struct_to_dict(s::T) where T
         # Extract field names and values from the struct

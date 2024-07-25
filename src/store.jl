@@ -66,7 +66,7 @@ module Store
         # TODO: Implement this function
         #------------------------------
         # f_name = joinpath(root, file)
-        # sha_1 = bytes2hex(sha1(f_name))
+        sha_1 = bytes2hex(sha1(f_name))
         # assign = Store.Assignment(sha_1, root, f_name, ext, "book_file", "", "waiting")
         # Graph.replace!(db, assign)
         # dataset = [f_name, ext, root]

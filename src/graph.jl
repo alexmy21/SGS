@@ -63,7 +63,7 @@ module HllGraph
         sha1::String
         labels::Vector{String}
         dataset::Vector{UInt64}
-        search::String
+        searchable::String
 
         # # Inner constructor
         function Node(sha1::String, labels::Vector{String}, dataset::Vector{UInt64}) 
@@ -117,7 +117,7 @@ module HllGraph
     dict(n::Node) = Dict{Symbol, Any}(:sha1 => n.sha1, 
                     :labels => JSON3.write(n.labels), 
                     :dataset => JSON3.write(n.dataset),
-                    :search => n.search)
+                    :search => n.searchable)
     card(n::Node, P::Int=10) = HllSets.count(HllSets.restore(HllSet{P}(), UInt64.(n.dataset)))
 
     #-----------------------------------------------------------------------------# Edge

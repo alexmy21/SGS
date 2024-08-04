@@ -68,9 +68,9 @@ module HllSets
     export HllSet, add!, count, union, intersect, diff, 
         isequal, isempty, id, delta, getbin, getzeros, maxidx, match, cosine, dump, restore
 
-    struct HllSet{P} 
+   
+    struct HllSet{P}
         counts::Vector{BitVector}
-
         function HllSet{P}() where {P}
             validate_P(P)
             n = calculate_n(P)
@@ -90,6 +90,10 @@ module HllSets
         function init(n, P)
             return [falses(64 - 1) for _ in 1:n]
         end
+    end
+
+    function HllSet(p::Int=10)
+        return HllSet{p}()
     end
 
     # Overload the show function to print the HllSet
@@ -112,6 +116,15 @@ module HllSets
     function Base.copy!(dest::HllSet{P}, src::HllSet{P}) where {P}
         length(dest.counts) == length(src.counts) || throw(ArgumentError("HllSet{P} must have same size"))
         @inbounds for i in 1:length(dest.counts)
+            dest.counts[i] = src.counts[i]
+        end
+        return dest
+    end
+
+    function Base.copy!(src::HllSet{P}) where {P}
+        # length(dest.counts) == length(src.counts) || throw(ArgumentError("HllSet{P} must have same size"))
+        dest = HllSet{P}()
+        @inbounds for i in 1:length(src.counts)
             dest.counts[i] = src.counts[i]
         end
         return dest
@@ -151,6 +164,70 @@ module HllSets
             z.counts[i] = .~y.counts[i] .&x.counts[i]
         end
         return z
+    end
+
+    """
+        This convenience methods that semantically reflect the purpose of using set_comp function
+        in case of comparing two states of the same set now (current) and as it was before (previous).
+        - set_added - returns the elements that are in the current set but not in the previous
+        - set_deleted - returns the elements that are in the previous set but not in the current
+    """
+    function set_added(current::HllSet{P}, previous::HllSet{P}) where {P} 
+        length(previous.counts) == length(current.counts) || throw(ArgumentError("HllSet{P} must have same size"))
+        added = HllSet{P}()
+        @inbounds for i in 1:length(previous.counts)
+            added.counts[i] = .~previous.counts[i] .&current.counts[i]
+        end
+        return added
+    end
+
+    function set_deleted(current::HllSet{P}, previous::HllSet{P}) where {P} 
+        length(previous.counts) == length(current.counts) || throw(ArgumentError("HllSet{P} must have same size"))
+        added = HllSet{P}()
+        @inbounds for i in 1:length(previous.counts)
+            added.counts[i] = .~current.counts[i] .&previous.counts[i]
+        end
+        return added
+    end
+
+    """
+        The `Base.diff` function in Julia is part of the `HllSet` struct and it's used to calculate the difference between two `HllSet` instances.
+
+        Here's a step-by-step explanation of how it works:
+
+        1. The function takes two arguments: two instances of `HllSet`.
+
+        2. It checks if the lengths of `x.counts` and `y.counts` are equal. If they are not, it throws an `ArgumentError`.
+
+        3. It initializes three new `HllSet` instances: `n`, `d`, and `r`.
+
+        4. It calculates the set complement of `hll_1` and `hll_2` (i.e., elements that are in `hll_1` but not in `hll_2`) 
+        and assigns it to `n`.
+
+        5. It calculates the set complement of `hll_2` and `hll_1` (i.e., elements that are in `hll_2` but not in `hll_1`) 
+        and assigns it to `d`.
+
+        6. It calculates the intersection of `hll_1` and `hll_2` (i.e., elements that are in both `hll_1` and `hll_2`) 
+        and assigns it to `r`.
+
+        7. It returns a tuple with three fields: `DEL` (for deleted elements), `RET` (for retained elements), 
+        and `NEW` (for new elements). Each field is an `HllSet` representing the corresponding set of elements.
+
+        This function essentially calculates the difference between two `HllSet`s in terms of deleted, retained, and new elements.
+
+    """
+    function Base.diff(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
+        length(hll_1.counts) == length(hll_2.counts) || throw(ArgumentError("HllSet{P} must have same size"))
+
+        n = HllSet{P}()
+        d = HllSet{P}()
+        r = HllSet{P}()
+
+        d = set_comp(hll_1, hll_2)
+        n = set_comp(hll_2, hll_1)
+        r = intersect(hll_1, hll_2)
+
+        return (DEL = d, RET = r, NEW = n)
     end
 
     function Base.isequal(x::HllSet{P}, y::HllSet{P}) where {P} 
@@ -304,6 +381,20 @@ module HllSets
             it's highly unlikely that two different `HllSet`s will have the same identifier.
     """
     function id(x::HllSet{P}) where {P}
+        if x == nothing
+            return nothing
+        end
+        # Convert the Vector{BitVector} to a byte array
+        bytearray = UInt8[]
+        for bv in x.counts
+            append!(bytearray, reinterpret(UInt8, bv))
+        end
+        # Calculate the SHA1 hash
+        hash_value = SHA.sha1(bytearray)
+        return SHA.bytes2hex(hash_value)
+    end
+
+    function sha1(x::HllSet{P}) where {P}
         # Convert the Vector{BitVector} to a byte array
         bytearray = UInt8[]
         for bv in x.counts
@@ -344,46 +435,6 @@ module HllSets
         count_u = count(union(x, y))
         count_i = count(intersect(x, y))
         return round(Int64, ((count_i / count_u) * 100))
-    end
-
-    """
-        The `Base.diff` function in Julia is part of the `HllSet` struct and it's used to calculate the difference between two `HllSet` instances.
-
-        Here's a step-by-step explanation of how it works:
-
-        1. The function takes two arguments: two instances of `HllSet`.
-
-        2. It checks if the lengths of `x.counts` and `y.counts` are equal. If they are not, it throws an `ArgumentError`.
-
-        3. It initializes three new `HllSet` instances: `n`, `d`, and `r`.
-
-        4. It calculates the set complement of `hll_1` and `hll_2` (i.e., elements that are in `hll_1` but not in `hll_2`) 
-        and assigns it to `n`.
-
-        5. It calculates the set complement of `hll_2` and `hll_1` (i.e., elements that are in `hll_2` but not in `hll_1`) 
-        and assigns it to `d`.
-
-        6. It calculates the intersection of `hll_1` and `hll_2` (i.e., elements that are in both `hll_1` and `hll_2`) 
-        and assigns it to `r`.
-
-        7. It returns a tuple with three fields: `DEL` (for deleted elements), `RET` (for retained elements), 
-        and `NEW` (for new elements). Each field is an `HllSet` representing the corresponding set of elements.
-
-        This function essentially calculates the difference between two `HllSet`s in terms of deleted, retained, and new elements.
-
-    """
-    function Base.diff(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
-        length(hll_1.counts) == length(hll_2.counts) || throw(ArgumentError("HllSet{P} must have same size"))
-
-        n = HllSet{P}()
-        d = HllSet{P}()
-        r = HllSet{P}()
-
-        n = set_comp(hll_1, hll_2)
-        d = set_comp(hll_2, hll_1)
-        r = intersect(hll_1, hll_2)
-
-        return (DEL = d, RET = r, NEW = n)
     end
 
     """

@@ -13,33 +13,9 @@ module Util
         for i in 1:length(data)
             byte_array *= string(Int32(data[i]), base=16, pad=4)
         end        
-        # println("to_blob: ", length(data), "; ", length(byte_array))
+        
         return byte_array
     end
-
-    # TODO: need some work or just remove all of them
-    #-------------------------------------------------
-    # function from_blob(blob::Vector{UInt8})
-    #     # if length(blob) % 8 != 0
-    #     #     println(length(blob))
-    #     #     throw(ArgumentError("Length of byte array must be a multiple of 8"))
-    #     # end
-    #     uint64_vector = reinterpret(UInt64, blob)
-    #     return uint64_vector
-    # end
-
-    # function from_blob(blob::AbstractString)        
-    #     _blob = Vector{UInt8}(codeunits(blob)) 
-    #     if length(_blob) % 8 != 0
-    #         # println(length(blob))
-    #         # parts = split(blob, ",")
-    #         # println(length(parts))
-    #         # println(_blob)
-    #         throw(ArgumentError("Length of byte array must be a multiple of 8"))
-    #     end       
-    #     uint64_vector = reinterpret(UInt64, _blob)
-    #     return uint64_vector
-    # end
 
     function parse_uint8_array(str::AbstractString) :: Vector{UInt8}
         # Split the string on commas
@@ -135,6 +111,35 @@ module Util
         end
         # Return the hash
         return digest(h)
+    end
+
+    function remove_random_bits(bitvectors::Vector{BitVector}, N::Int)
+        # Filter out empty BitVectors
+        non_empty_bitvectors = filter(bv -> !isempty(bv), bitvectors)
+        
+        total_bits = sum(count(b -> b, bv) for bv in non_empty_bitvectors)
+        if N > total_bits
+            error("N is greater than the total number of true bits in the BitVectors")
+        end
+
+        for _ in 1:N
+            # Randomly select a non-empty BitVector
+            bv_index = rand(1:length(non_empty_bitvectors))
+            bv = non_empty_bitvectors[bv_index]
+
+            # Get indices with true values
+            true_indices = findall(bv)
+
+            # Randomly select one of the true indices
+            if !isempty(true_indices)
+                bit_index = rand(true_indices)
+
+                # Set the selected bit to false
+                bv[bit_index] = false
+            end
+        end
+
+        return bitvectors
     end
 
     # Support for calculating sha1 for union and intersection of strings

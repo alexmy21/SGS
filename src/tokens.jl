@@ -13,33 +13,35 @@ module Tokens
 
 
     #---------------------------------------------------------------------------- Token #
-    struct Token 
+    mutable struct Token 
         id::Int
         bin::Int
         zeros::Int
-        token::Set{String}
+        token::String
         tf::Int
+        refs::String
     end
 
-    Token(id::Int, bin::Int, zeros::Int; token::Set{String}, tf::Int) = Token(id, bin, zeros, JSON3.read(token), tf)
-    Token(row::DataFrameRow) = Token(row.id, row.bin, row.zeros, JSON3.read(row.token), row.tf)
-    Token(dict::Dict{Symbol, Any}) = Token(dict.id, dict.bin, dict.zeros, JSON3.read(dict.token), dict.tf)
+    Token(id::Int, bin::Int, zeros::Int; token::String, tf::Int, refs::String) = Token(id, bin, zeros, token, tf, token)
+    Token(row::DataFrameRow) = Token(row.id, row.bin, row.zeros, row.token, row.tf, row.refs)
+    Token(dict::Dict{Symbol, Any}) = Token(dict.id, dict.bin, dict.zeros, dict.token, dict.tf, dict.refs)
 
     function Token(dict::Dict{AbstractString, AbstractString})
-        id = parse(Int, dict["id"])
-        bin = parse(Int, dict["bin"])
-        zeros = parse(Int, dict["zeros"])
-        token = JSON3.read(dict["token"], Set{String})
-        tf = parse(Int, dict["tf"])
-        return Token(id, bin, zeros, token, tf)
+        id      = parse(Int, dict["id"])
+        bin     = parse(Int, dict["bin"])
+        zeros   = parse(Int, dict["zeros"])
+        token   = dict["token"]
+        tf      = parse(Int, dict["tf"])
+        refs    = dict["refs"]
+        return Token(id, bin, zeros, token, tf, refs)
     end
 
     function Base.show(io::IO, o::Token)
-        print(io, "Token($(o.id), $(o.bin), $(o.zeros), $(o.token), $(o.tf))")
+        print(io, "Token($(o.id), $(o.bin), $(o.zeros), $(o.token), $(o.tf), $(o.refs))")
     end
 
-    args(t::Token) = (t.id, t.bin, t.zeros, JSON3.write(collect(t.token)), t.tf)
-    dict(t::Token) = Dict(:id => t.id, :bin => t.bin, :zeros => t.zeros, :token => JSON3.write(t.token), :tf => t.tf)
+    args(t::Token) = (t.id, t.bin, t.zeros, t.token, t.tf, t.refs)
+    dict(t::Token) = Dict(:id => t.id, :bin => t.bin, :zeros => t.zeros, :token => t.token, :tf => t.tf, :refs => t.refs)
 
     # Tokens operations
     #-----------------------------------------------------------------------------# 
@@ -83,85 +85,97 @@ module Tokens
         leveraging Redis sets and HyperLogLog for efficient storage and retrieval.
     """   
     function set_token(conn::RedisConnection, token::Token, node_sha1::String, status::String)
-        # Add node_sha1 to Redis set that holds all node's refs for this token
-        size_before = Redis.scard(conn, token.id)
-        Redis.sadd(conn, token.id, node_sha1)
-        size_after = Redis.scard(conn, token.id)
-        # If size_after is greater than size_before, then update token hash in Redis
-        # with new term frequency and search field
-        if size_after > size_before
-            token_dict = dict(token)
-            token_dict[:tf] = token.tf + 1
-            # Update token_dict with new field 'search'
-            # First create tiny hll set and add token refs from Redis set 
-            hll = HllSets.HllSet{8}()
-            HllSets.add!(hll, Redis.smembers(conn, token.id))
-            # Add search field to token_dict
-            token_dict[:searchable] = Util.to_blob(HllSets.dump(hll))
-            # Submit token to redis
-            key_name = string(status, ":", "token", ":", token.id)
-            Redis.hmset(conn, key_name, token_dict)
+        # Create hash key for token
+        key_name = create_token_id(token.id, status)
+        token_hash = Redis.hgetall(conn, key_name)
+        
+        if token_hash != nothing && !isempty(token_hash) 
+            toc     = token_hash["token"]
+            tocset  = Set(split(toc, ","))
+            # update token.token in case we have new token with the same hash
+            tocset = union(tocset, Set(split(token.token, ","))) 
+            cnt_toc = join(tocset, ",")
+            token.token = cnt_toc
+            # update refrences if have new node.sha1
+            refs    = token_hash["refs"]            
+            refset  = Set(split(refs, ","))            
+            if !in(refset, node_sha1)
+                # Adjust tf and refs properties
+                refset = union(refset, Set(split(node_sha1, ",")))                
+                cnt_refs    = join(refset, ",")   
+                token.refs  = cnt_refs
+                token.tf    = token.tf + 1
+            end
         end
+        # Create new hash for token
+        Redis.hmset(conn, key_name, Tokens.dict(token))
     end
 
     function set_tokens(conn::RedisConnection, tokens::Set{String}, node_sha1::String, status::String; P::Int=10, seed::Int=0)
-        for token in tokens
-            tf = 0
-            _token = Set{String}()
-
-            x = HllSets.u_hash(token, seed=seed)
-            bin = HllSets.getbin(x, P=P)
-            zeros = HllSets.getzeros(x, P=P)
-            key_name = string(status, ":", "token", ":", x)
-
+        for token in tokens 
+            # x = HllSets.u_hash(token, seed=seed)           
+            key_name = create_token_id(token, status)
             # Assuming tf is retrieved from Redis and is a string
-            hash = Redis.hgetall(conn, key_name)            
-
+            _hash = Redis.hgetall(conn, key_name)
             # Check if tf_str is not nothing and then convert it to an integer
-            if !(hash == nothing || isempty(hash))
-                tf = parse(Int, hash["tf"])                
-                _token = JSON3.read(hash["token"], Set{String})
+            if !(_hash == nothing || isempty(_hash))
+                _token = Token(_hash)
+                set_token(conn, _token, node_sha1, status)
             else
-                tf = 0
-            end            
-            
-            push!(_token, token)
-            
-            token = Token(x, bin, zeros, _token, tf)
-            set_token(conn, token, node_sha1, status)
+                _token = create_token(token, node_sha1)
+                set_token(conn, _token, node_sha1, status)
+            end 
         end
     end
 
+    function create_token_id(token::String, status::String; seed::Int=0)
+        return string(status, ":", "token", ":", HllSets.u_hash(token, seed=seed))
+    end
+
+    function create_token_id(id::Int, status::String)
+        return string(status, ":", "token", ":", id)
+    end
+
+    # Creates new Token from token string and provided node_sha1
+    function create_token(token::String, node_sha1; P::Int=10, seed::Int=0)
+        x = HllSets.u_hash(token, seed=seed)
+        _token = token
+        bin = HllSets.getbin(x, P=P)
+        zeros = HllSets.getzeros(x, P=P)
+        tf = 0
+        refs = node_sha1
+        return Token(x, bin, zeros,_token, tf, refs)
+    end
+
     function get_token(conn::RedisConnection, token_id::Int, status::String)
-        key_name = status * ":" * "token" * ":" * token.id
+        key_name = create_token_id(token_id, status)
         token_dict = Redis.hgetall(conn, key_name)
         token = Token(token_dict)
         return token
     end
 
-    function get_token_reffs(conn::RedisConnection, token_id::Int, status::String)
-        return Redis.smembers(conn, status * ":" * token * ":" * token.id)
-    end
-
-    function get_token_and_reffs(conn::RedisConnection, token_id::Int, status::String)
-        token = get_token(conn, token_id)
-        reffs = get_token_reffs(conn, token_id)
-        return token, reffs
-    end
-
-    function get_tokens(conn::RedisConnection, token_ids::Array{Int, 1})
-        tokens = [get_token(conn, token_id) for token_id in token_ids]
+    function get_tokens(conn::RedisConnection, token_ids::Array{Int, 1}, status::String)
+        tokens = [get_token(conn, token_id, status) for token_id in token_ids]
         return tokens
     end
-
-    function get_tokens_reffs(conn::RedisConnection, token_ids::Array{Int, 1})
-        reffs = [get_token_reffs(conn, token_id) for token_id in token_ids]
-        return reffs
+    
+    # token RediSearch index
+    #--------------------------------------------------------------------------------------#
+    """
+        id::Int
+        bin::Int
+        zeros::Int
+        token::String
+        tf::Int
+        refs::String
+    """
+    function token_idx(conn::RedisConnection, idx_name::String, idx_prefix::String)
+        try
+            Redis.execute_command(conn, ["FT.CREATE", "$idx_name", "ON", "HASH", "PREFIX", 1, "$idx_prefix", 
+                "SCHEMA", "id", "NUMERIC", "bin", "NUMERIC", "zeros", "NUMERIC", 
+                "token", "TEXT", "tf", "NUMERIC", "refs", "TEXT"])
+        catch e
+            println(e)
+        end
     end
-
-    function get_tokens_and_reffs(conn::RedisConnection, token_ids::Array{Int, 1})
-        tokens = get_tokens(conn, token_ids)
-        reffs = get_tokens_reffs(conn, token_ids)
-        return tokens, reffs
-    end 
 end

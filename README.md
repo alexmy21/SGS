@@ -275,22 +275,25 @@ Currently, we have identified several operations associated with the Static Stru
    
 The following paragraphs present the source code for all operations mentioned. Each operation is accompanied by a corresponding 'backprop' function, which propagates changes in the 'grad' field of the resulting Entity instance to the Entity instances of the input arguments. It is important to note that the unary operations, Negation and Copy, do not have associated backprop functions.
 
-Negation:
+**Negation**:
 
     function negation(a::Entity{P}) where {P}
         return Entity{P}(HllSets.copy!(a.hll); grad=-a.grad, op=a.op)
     end
 
-Copy:
-function copy(a::Entity{P}) where {P}
-return Entity{P}(HllSets.copy!(a.hll); grad=a.grad, op=a.op)
-end
-Union:
-function union(a::Entity{P}, b::Entity{P}) where {P}
-hll_result = HllSets.union(a.hll, b.hll)
-op_result = Operation(union, (a, b))
-return Entity{P}(hll_result; grad=0.0, op=op_result)
-end
+**Copy**:
+
+    function copy(a::Entity{P}) where {P}
+        return Entity{P}(HllSets.copy!(a.hll); grad=a.grad, op=a.op)
+    end
+
+**Union**:
+
+    function union(a::Entity{P}, b::Entity{P}) where {P}
+        hll_result = HllSets.union(a.hll, b.hll)
+        op_result = Operation(union, (a, b))
+        return Entity{P}(hll_result; grad=0.0, op=op_result)
+    end
 
 We are providing the source code for the 'backprop' function specifically for the union operation. We will not be including it for other operations as they are nearly identical at present. We have chosen to keep them this way due to planned future enhancements that will likely differentiate them.
 
@@ -306,7 +309,7 @@ We are providing the source code for the 'backprop' function specifically for th
         end
     end
 
-Intersection:
+**Intersection**:
 
     function intersect(a::Entity{P}, b::Entity{P}) where {P}
         hll_result = HllSets.intersect(a.hll, b.hll)
@@ -314,7 +317,7 @@ Intersection:
         return Entity{P}(hll_result; grad=0.0, op=op_result)
     end
 
-XOR:
+**XOR**:
 
     function xor(a::Entity{P}, b::Entity{P}) where {P}
         hll_result = HllSets.set_xor(a.hll, b.hll)
@@ -322,7 +325,7 @@ XOR:
         return Entity{P}(hll_result; grad=0.0, op=op_result)
     end
 
-Complement:
+**Complement**:
 
     # comp - complement returns the elements that are in the set 'a' but not in the 'b'
     function comp(a::Entity{P}, b::Entity{P}; opType=comp) where {P}
@@ -348,7 +351,7 @@ It is important to note that the operations discussed are based on the complemen
 
 The operations responsible for managing changes in HllSets also oversee the grad field within the Entity. This distinction highlights a significant difference between Static and Dynamic Structure operations.
 
-Added:
+**Added**:
 
     function added(current::Entity{P}, previous::Entity{P}) where {P} 
         length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size"))
@@ -372,7 +375,7 @@ Here is the backprop function. It effectively propagates changes through the `gr
         end
     end
 
-Retained:
+**Retained**:
 
     function retained(current::Entity{P}, previous::Entity{P}) where {P} 
         length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size"))
@@ -385,7 +388,7 @@ Retained:
 
 AS you can see this operation uses HllSet intersection to get retained HllSet. 
 
-Deleted:
+**Deleted**:
 
     function deleted(current::Entity{P}, previous::Entity{P}) where {P} 
     length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size")
@@ -396,7 +399,7 @@ Deleted:
         return Entity{P}(hll_result; grad=comp_grad, op=op_result)
     end
 
-Difference:
+**Difference**:
 
     function diff(a::Entity{P}, b::Entity{P}) where {P}
         d = deleted(a, b)
@@ -407,7 +410,7 @@ Difference:
 
 This operation allows us to run all three previous operations in the batch. We will use it in the following operation.
 
-Advance:
+**Advance**:
 
     # advance - Allows us to calculate the gradient for the advance operation
     # We are using 'advance' name to reflect the transformation of the set 
@@ -425,7 +428,7 @@ Advance:
         return Entity{P}(hll_res; grad=grad_res, op=op_result)
     end
 
-This enhanced version of the advanced function enables us to discern trends by analyzing the dynamics of changes within added, retained, and deleted subsets. This accumulated insight allows us to forecast the future state of any given Entity instance. By implementing this function across all Entity instances within the neural network, we can anticipate alterations throughout the entire system. Specifically for the SGS, this capability means that we can successfully regenerate the SGS.
+This enhanced version of the advance function enables us to discern trends by analyzing the dynamics of changes within added, retained, and deleted subsets. This accumulated insight allows us to forecast the future state of any given Entity instance. By implementing this function across all Entity instances within the neural network, we can anticipate alterations throughout the entire system. Specifically for the SGS, this capability means that we can successfully regenerate the SGS.
 
     """ 
         This version of advance operation generates new unknown set from the current set

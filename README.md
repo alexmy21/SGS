@@ -577,11 +577,15 @@ And it’s output:
 
 The result is somewhat longer than before, as it includes a complete trace of the arguments as well.
 
+You can find more examples in entity.ipynb.
+
 
 
 ### Module: graph.jl
 
-The `graph.jl` module stands as the cornerstone of the SGS platform, encapsulating its core functionalities. In this section, we will delve into the data structures and fundamental functions integral to this module, drawing insights from the `hll_graph.ipynb` Jupyter notebook.
+In this section, we will delve into the data structures and fundamental functions integral to this module, drawing insights from the `hll_graph.ipynb` Jupyter notebook.
+
+It's crucial to understand that the modules entity.jl and graph.jl are designed to complement each other. Both modules leverage a graph structure, employing a series of operations centered around the HolSets. Their primary distinction lies in the additional attributes that define the specific purposes of each module. Moreover, there is a direct correspondence between the structures in entity.jl and graph.jl; a HllSet identified by a specific sha1 in entity.jl will correspond to an identical HllSet with the same sha1 in graph.jl.
 
 In the initial cell, we are configuring the environment:
 

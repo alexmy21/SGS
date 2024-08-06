@@ -781,12 +781,23 @@ Alternatively, the `RENAME` command allows for reassigning a hash to a different
 
 ## References
 
-1. https://www.cnbc.com/2022/09/21/why-elon-musk-says-patents-are-for-the-weak.html 
+1. https://mikesaint-antoine.github.io/SimpleGrad.jl/under_the_hood/
+2. https://github.com/karpathy/micrograd
+3. https://www.youtube.com/watch?v=VMj-3S1tku0
+4. https://nnfs.io/
+5. https://www.cnbc.com/2022/09/21/why-elon-musk-says-patents-are-for-the-weak.html 
+6. https://github.com/microsoft/autogen
+7. https://redis.io/docs/latest/commands/ttl/ 
+8. https://medium.com/javarevisited/how-redis-ttl-works-c77785d49a96 
+9. https://redis.io/blog/cache-eviction-strategies/
+10. https://www.linkedin.com/pulse/caching-strategies-eviction-policies-redis-asim-hafeez/ 
+11. https://redis.io/wp-content/uploads/2021/12/caching-at-scale-with-redis-updated-2021-12-04.pdf 
+
 
 
 ## Appendix
 
-I would like to discuss the core aspects of SGS development strategy regarding Intellectual Properties, drawing insights from notable industry practices [1].
+I would like to discuss the core aspects of SGS development strategy regarding Intellectual Properties, drawing insights from notable industry practices [5].
 
 During a tour, when Jay Leno inquired whether SpaceX had patented the material used in constructing its spacecraft, Elon Musk clarified that his company does not focus on patenting. "We don't really patent things," Musk stated. 
 

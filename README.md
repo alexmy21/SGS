@@ -72,7 +72,7 @@ Among these, `store.jl` is notable for performing complex processing by leveragi
 
 ## Metadata as the Foundation of SGS
 
-The SGS framework adopts a novel approach by utilizing metadata to depict elements in a more abstract manner. This shift enhances the logic used in AI model development, moving beyond simplistic cause-and-effect relationships (when after that is treated as because of that) to a more nuanced understanding of correlations. Metadata organizes elements into groups that share semantic similarities, providing a robust framework for AI training methodologies.
+The SGS framework adopts a novel approach by utilizing metadata to depict elements in a more abstract manner. This shift enhances the logic used in AI model development, moving beyond simplistic and direct cause-and-effect relationships to a more nuanced understanding of correlations. Metadata organizes elements into groups that share semantic similarities, providing a robust framework for AI training methodologies.
 
 HllSets serve as embeddings for these groups, represented as fixed-size bit-vectors, specifically a 2-dimensional Tensor (64, P). This allows for versatile comparisons across various metrics, fulfilling the primary objective of embedding while offering additional advantages over traditional numerical representations.
 

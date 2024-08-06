@@ -1,8 +1,8 @@
-# README.md for SGS Project
+# SGS Project
 
 ## Overview
 
-This document serves as a technical overview of the development process for the SGS project. For a more comprehensive understanding of the project's evolution and objectives, we recommend reviewing the accompanying `Introduction.md` file.
+This document serves as a technical overview of the development process for the SGS project. For a more comprehensive understanding of the project's evolution and objectives, we recommend reviewing the accompanying `README_detailed.md` file.
 
 **Note:** This document is currently a work in progress, and we anticipate adding new sections and editing existing content in the near future.
 

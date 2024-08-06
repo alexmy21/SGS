@@ -50,25 +50,38 @@ When you launch VS Code, open the terminal window and execute the following comm
 
 ## SGS Architecture
 
-The core architecture of SGS is encapsulated within seven essential files:
+The core architecture of SGS is encapsulated within eight essential files:
 
-1. **constants.jl** - This file houses a collection of constants essential for the HyperLogLog algorithm utilized in sets.jl.
+- **constants.jl**: This file contains a collection of constants critical for the HyperLogLog algorithm used in sets.jl.
 
-2. **sets.jl** - This script implements HllSets, which are fundamental building blocks for all data structures within SGS.
+- **sets.jl**: This script implements HllSets, which serve as fundamental building blocks for all data structures within SGS.
 
-3. **graph.jl** - This module provides an implementation of the Graph, which employs wrapped HllSets as nodes and represents edges as pairs of connected nodes. Additionally, it supports all set operations on nodes, adapted from the corresponding operations in HllSets (sets.jl).
+- **entity.jl**: This module introduces a new structure called Entity, which encapsulates metadata using HllSets. This initiative builds on Mike Saint-Antoine's work with SimpleGrad.jl, adapted from Andrey Karpathy's MicroGrad project. Unlike the original frameworks that utilize numerical embeddings in their neural networks, our approach substitutes these embeddings with HllSets (see [1, 2, 3, 4]).
+- **graph.jl**: This module implements the Graph structure, employing wrapped HllSets as nodes and representing edges as pairs of connected nodes. It also supports all set operations on nodes, adapted from the corresponding operations in HllSets (sets.jl).
 
-4. **store.jl** - Serving as the data management hub, this module handles all data-related operations including data ingestion, processing scheduling, commits, and import/export functions. Essentially, store.jl facilitates all operations and tools necessary to support the SGS self-generative loop.
+- **store.jl**: Serving as the data management hub, this module oversees all data-related operations, including data ingestion, processing scheduling, commits, and import/export functions. Essentially, store.jl facilitates all operations and tools necessary to support the SGS self-generative loop.
 
-5. **search.jl** - This file offers support for search operations on Redisearch indices.
+- **search.jl**: This file provides support for search operations on Redisearch indices.
 
-6. **tokens.jl** - This module is dedicated to managing token inverted indexes, linking datasets with their content treated as collections of tokens. All unique tokens extracted from the datasets are contained within Redisearch token indices.
+- **tokens.jl**: This module is dedicated to managing token inverted indexes, linking datasets with their content treated as collections of tokens. All unique tokens extracted from the datasets are stored within Redisearch token indices.
 
-7. **utils.jl** - A collection of general utility functions that are common across all files.
+- **utils.jl**: A collection of general utility functions that are common across all files.
 
-Among these, store.jl is notable for conducting the most complex processing by leveraging functions from other modules.
+Among these, store.jl stands out for performing the most complex processing by leveraging functions from other modules. 
 
-The strength of SGS lies in its meticulously engineered data architecture, which is specifically designed and tuned to meet the unique requirements of a self-reproducing loop.
+The strength of SGS lies in its meticulously engineered data architecture, specifically designed and optimized to meet the unique requirements of a self-reproducing loop.
+
+## Metadata as the Foundation of SGS
+
+There is a common perspective that numerical embeddings in standard neural network models are created by transforming tangible entities into numerical formats. While this approach effectively represents elements of reality, our focus shifts toward employing metadata to depict these elements in a more abstract manner. One of the key benefits of metadata is its capacity to organize elements into groups that share semantic similarities, although these groups are not completely distinct and often exhibit overlapping characteristics.
+
+Adopting metadata signifies a fundamental shift, profoundly altering the way AI models are developed. Consider the difference between training dogs and educating humans: both processes aim to instill an understanding of causal relationships, but the complexity of the logic varies significantly. Dog training involves straightforward cause-and-effect reasoning, but human education embraces a more intricate logic where cause and effect are not necessarily directly linked. Presently, our AI training techniques resemble methods more suitable for dog training.
+
+By abstracting real-world entities into metadata, we enhance the logic used, moving beyond the simplistic cause-and-effect, or "dog logic." In the domain of metadata, the principle of "this follows that" more reliably signals a causal relationship, often implying a "because of that" rationale.
+
+A critical aspect of our approach is that each metadata item correlates with a specific group of elements. Within the metadata domain, an HllSet acts as an embedding for these groups. Unlike traditional numerical representations, this embedding takes the form of a fixed-size bit-vector, specifically a 2-dimensional Tensor (64, P). In Julia programming language, this is represented as Vector{BitVector}, where each vector is 64 bits in length, and the number of these bit-sets is defined by the parameter P, which determines the precision of the HyperLogLog approximation for the entity collection.
+
+HllSets provide a versatile method for comparing different instances across a wide range of metrics, effectively fulfilling the primary objective of embedding. Moreover, HllSets offer additional advantages, proving to be a dependable alternative to original datasets and fully supporting all set operations.
 
 ## SGS data structure
 
@@ -76,7 +89,7 @@ The strength of SGS lies in its meticulously engineered data architecture, which
 
 The diagram provided below depicts the relationships among datasets, HllSets, and Graph Nodes.
 
-![alt text](<Pics/Untitled presentation (1).jpg>)
+![alt text](<Pics/Screenshot from 2024-08-05 22-30-29.png>)
 
 It is crucial to note that there is a seamless transformation from an HllSet to a dataset within a Graph Node, and vice versa.
 
@@ -91,13 +104,28 @@ Examining the diagram might easily give the mistaken impression that we are deal
 The initial letter in the hash key (b for buffer, h for header, t for tail) denotes the life cycle stage of the specified node instance. As it transitions from one stage to the next, the node itself remains unchanged. In the SGS, while the names may alter, the values remain consistent.
 
 
-### Utilizing Redis benefits
+## Redis as an integral part of SGS
 
-RediSearch leverages Redis naming convention feature to associate search indices with Redis hashes. For instance, the index 'b:nodes' is defined by a schema that links to 'b:node' as a hash prefix. RediSearch monitors all newly created hashes and, if a hash starts with a prefix specified in any of the indices, it will link this hash to the relevant index.
+Redis was selected as the data management tool for SGS following a thorough vetting process. About 10 years ago, we began incorporating Redis into our Java-based projects. Within Java environments, Redis proved effective for managing runtime data. However, interfacing with Redis from Java presented challenges, particularly when utilizing custom-built Redis extension modules. Redis naturally aligns more closely with Python environments, facilitating its integration with Julia and thus making it a suitable runtime data management tool for Julia as well.
 
-A particularly useful feature in Redis is the RENAME command. This command allows users to rename any key, including hash keys. By renaming a hash from 'b:node:some_sha1_id' to 'h:node:some_sha1_id', we effectively transfer this hash from the 'b:nodes' index to the 'h:nodes' index without physically moving any data. This exemplifies the concept of "zero copy."
+RediSearch, an extension of Redis, utilizes the naming convention feature of Redis to link search indices with hashes. For example, the index 'b:nodes' is connected through a schema to the hash prefix 'b:node'. RediSearch tracks all new hashes and associates those starting with a specified prefix in any index to the corresponding index.
 
-As outlined in Introduction.md, the data acquisition process in SGS involves buffering all newly acquired data in the transaction stage before committing to the head. If the head already contains data intended for commitment, the commit module will first relocate the existing dataset to the tail by renaming it—this is another instance of a "zero copy" move. Subsequently, it places the new dataset into the head, again through renaming.
+A notable feature of Redis is the RENAME command, which allows users to change the name of any key, including hash keys. By renaming a hash from 'b:node:some_sha1_id' to 'h:node:some_sha1_id', we can shift this hash from the 'b:nodes' index to the 'h:nodes' index without physically relocating the data, exemplifying the "zero copy" concept.
+
+As detailed in the Introduction.md document, the data acquisition process in SGS involves buffering all newly acquired data in the transaction stage before committing it to the head. If the head already contains data slated for commitment, the commit module first transfers the existing dataset to the tail by renaming it—another "zero copy" maneuver—before placing the new dataset into the head, also via renaming.
+
+Redis provides essential tools to support the Self Reproducing loop in SGS. We have already highlighted the RENAME command and Redis hashes that aid in representing and transforming HllSets. A critical feature for SGS in Redis is the built-in key's TTL (Time To Live) and eviction mechanism.
+
+Redis TTL offers several key benefits:
+
+- **Cache Management**: It is extensively used to manage the lifespan of data in caches, allowing for the automatic removal of expired data and ensuring that caches remain relevant and current.
+- **Session Management**: In web applications, Redis TTL helps manage the duration of user sessions, automatically clearing inactive sessions to free up resources.
+- **Scheduled Tasks**: TTL can be employed to time the cessation or refreshment of tasks, such as email dispatches or data updates.
+- **Clean-up of Old Data**: TTL facilitates the automatic purge of outdated, irrelevant data, reducing the need for manual intervention.
+
+Moreover, Redis supports eviction policy management, which is crucial for managing cache size and memory usage. As the cache reaches capacity, a vital decision must be made: whether to reject new data or create space by discarding older data.
+
+SGS is fundamentally immutable, only altering certain parameters like gradient rather than its building elements. Instead, it generates new instances of these elements through the reproduction process. This leads to the exponential accumulation of obsolete elements that need to be removed under specific conditions, a task at which Redis excels.
 
 ## Testing SGS modules
 
@@ -225,9 +253,13 @@ Here is the output demonstrating that all the specified set laws are satisfied:
 
 ### Module: entity.jl
 
-This module is dedicated to supporting a new structure called Entity, designed to encapsulate metadata using HllSets. This initiative builds on the innovative work by Mike Saint-Antoine of SimpleGrad.jl, who adapted Andrey Karpathy's foundational MicroGrad project. While the original frameworks by Mike S.-A. and Andrey K. utilize Numbers as the fundamental components of their neural networks, our approach replaces Numbers with HllSets.
+This module supports a new structure called Entity, which encapsulates metadata using HllSets. This initiative builds on Mike Saint-Antoine's work with SimpleGrad.jl, adapted from Andrey Karpathy's MicroGrad project. Unlike the original frameworks that use numerical embeddings in their neural networks, our approach replaces them with HllSets.
 
 It is often argued that Numbers in conventional neural network models are derived by transforming "real" things through numerical embedding. This method is effective for those elements of reality. However, we aim to shift our focus from data to metadata, thereby describing these elements more abstractly. A significant advantage of using metadata is its inherent ability to categorically separate elements into semantically similar groups. These groups are not strictly distinct; the sets of entities described by different metadata often overlap.
+
+Transitioning to metadata represents a paradigm shift that fundamentally impacts how AI models are trained. There is a clear distinction between training dogs and educating people. At the heart of both training and teaching is the intent to instill a sense of causal logic in the learner. In dog training, the causal relationships are simple and direct: if "this follows that," it typically means "this is because of that." However, the logic in human education is more complex— "this follows that" does not necessarily imply "this is because of that." Currently, our methods for training AI models are more akin to dog training.
+
+By abstracting real-world entities into metadata, we refine the logic that is often limited to simple cause and effect, or "dog logic." In the realm of metadata, the principle of "this follows that" more consistently indicates a causal inference, frequently suggesting a "because of that" relationship.
 
 The most crucial aspect for us is that each piece of metadata correlates with a specific set of elements. In the realm of metadata, an HllSet serves as an embedding for a collection of these elements. This embedding is represented not as a numerical value but as a fixed-size bit-vector, specifically a 2-dimensional Tensor (64, P). In Julia, this is expressed as Vector{BitVector}, where each vector has a fixed length of 64 bits and the number of these bit-sets is determined by P. The parameter P defines the precision of the HyperLogLog approximation of the collection of entities. 
 
@@ -266,13 +298,14 @@ HllSet embodies the core essence of the Entity and remains immutable within any 
 In contrast, operations within the Dynamic Structure are designed to support modifications to an Entity instance. However, these modifications adhere to the overarching principle of immutability, which will be discussed further in the subsequent section.
 
 Currently, we have identified several operations associated with the Static Structure:
+
 1. Negation: This unary operation generates a new Entity instance by reversing the sign of the 'grad' field in the provided instance.
 2. Copy: creates a new Entity instance that is a copy of the Entity argument.
 3. Union: A binary operation that merges the HllSets of two Entity instances, resulting in a new Entity with a combined HllSet.
 4. Intersection: Similar to the union operation, this creates a new Entity by performing an intersection on the HllSets of the provided Entity instances.
 5. XOR (Exclusive OR): This operation also merges HllSets from two Entity instances but uses an exclusive OR approach.
 6. Complement (Comp): This operation produces a new Entity instance containing elements from the HllSet of the first argument that are not present in the HllSet of the second argument.
-   
+ 
 The following paragraphs present the source code for all operations mentioned. Each operation is accompanied by a corresponding 'backprop' function, which propagates changes in the 'grad' field of the resulting Entity instance to the Entity instances of the input arguments. It is important to note that the unary operations, Negation and Copy, do not have associated backprop functions.
 
 **Negation**:
@@ -585,7 +618,7 @@ You can find more examples in entity.ipynb.
 
 In this section, we will delve into the data structures and fundamental functions integral to this module, drawing insights from the `hll_graph.ipynb` Jupyter notebook.
 
-It's crucial to understand that the modules entity.jl and graph.jl are designed to complement each other. Both modules leverage a graph structure, employing a series of operations centered around the HolSets. Their primary distinction lies in the additional attributes that define the specific purposes of each module. Moreover, there is a direct correspondence between the structures in entity.jl and graph.jl; a HllSet identified by a specific sha1 in entity.jl will correspond to an identical HllSet with the same sha1 in graph.jl.
+It's crucial to understand that the modules entity.jl and graph.jl are designed to complement each other. Both modules leverage a graph structure, employing a series of operations centered around the HllSets. Their primary distinction lies in the additional attributes that define the specific purposes of each module. Moreover, there is a direct correspondence between the structures in entity.jl and graph.jl; a HllSet identified by a specific sha1 in entity.jl will correspond to an identical HllSet with the same sha1 in graph.jl.
 
 In the initial cell, we are configuring the environment:
 

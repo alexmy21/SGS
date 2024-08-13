@@ -134,20 +134,24 @@ local function count_trailing_zeros(num)
 end
 
 local function redis_rnd(token, p)
-    local hash = murmurhash3_32(token, 0) -- crc32.hash(token)
-    local random_number = get_random_number(hash)
+    local signed_number = murmurhash3_32(token, 0) -- Example function call
+    local unsigned_number = bit.band(signed_number, 0xFFFFFFFF)
+    
+    -- Ensure the number is treated as unsigned
+    if unsigned_number < 0 then
+        unsigned_number = unsigned_number + 2^32
+    end
 
-    -- Convert the random number to a 64-bit representation
-    local random_number_64 = bit.tobit(random_number)
+    -- Other operations to generate first_p_bits and trailing_zeros
+    local first_p_bits = bit.rshift(unsigned_number, 32 - p)
+    local trailing_zeros = 0
+    local temp = unsigned_number
+    while temp > 0 and bit.band(temp, 1) == 0 do
+        trailing_zeros = trailing_zeros + 1
+        temp = bit.rshift(temp, 1)
+    end
 
-    -- Extract the first p bits from the 64-bit representation
-    local mask = bit.lshift(1, p) - 1
-    local first_p_bits = bit.band(random_number_64, mask)
-
-    -- Count the number of trailing zeros in the 64-bit representation
-    local trailing_zeros = count_trailing_zeros(random_number_64)
-
-    return random_number, first_p_bits, trailing_zeros
+    return unsigned_number, first_p_bits, trailing_zeros
 end
 
 -- Function to get a specified number of random keys
@@ -204,6 +208,44 @@ end
 --
 -- Fieldes token and refs are presented as sets
 --
+local function zero_num_to_digit(z_num)
+    local n = tonumber(z_num)
+    return 2^(n - 1)
+end
+
+local function create_zero_vector(size)
+    local vector = {}
+    -- Fill the table with zeros
+    for i = 1, size do
+        vector[i] = 0
+    end
+    return vector
+end
+
+local function update_vector(vector, index, value, operation)
+
+    redis.log(redis.LOG_NOTICE, "vector: " .. tostring(vector))
+    redis.log(redis.LOG_NOTICE, "index: " .. tostring(index))
+    redis.log(redis.LOG_NOTICE, "value: " .. tostring(value))
+
+    -- Check if the index is within the bounds of the vector
+    if index < 1 or index > #vector then
+        error("Index out of bounds")
+    end
+    -- Update the element at the specified index
+    if operation == "AND" then
+        vector[index] = bit.band(vector[index], value)
+    elseif operation == "OR" then
+        vector[index] = bit.bor(vector[index], value)
+    elseif operation == "XOR" then
+        vector[index] = bit.bxor(vector[index], value)
+    else
+        return redis.error_reply("Unsupported operation")
+    end
+    -- Return the updated vector
+    return vector
+end
+
 local function ingest_01(keys, args)
     local key1  = keys[1] -- prefix for token hash
     local key2  = keys[2] -- hash key for the Entity instance or graph node (they should be the same)
@@ -211,8 +253,22 @@ local function ingest_01(keys, args)
     local batch = tonumber(args[2])
     local tokens = cjson.decode(args[3])
 
+    -- Add debugging statements
+    redis.log(redis.LOG_NOTICE, "key1: " .. tostring(key1))
+    redis.log(redis.LOG_NOTICE, "key2: " .. tostring(key2))
+    redis.log(redis.LOG_NOTICE, "p: " .. tostring(p))
+    redis.log(redis.LOG_NOTICE, "batch: " .. tostring(batch))
+    redis.log(redis.LOG_NOTICE, "tokens: " .. tostring(tokens))
+
     local pipeline = {}
     local pipeline_size = 0
+    local size = 2^p
+    local counts = create_zero_vector(size)
+
+    -- local ret_counts = cjson.encode(counts)
+    -- return ret_counts
+
+    local success = true
 
     for i = 1, #tokens do
         local token = tokens[i]
@@ -221,35 +277,51 @@ local function ingest_01(keys, args)
         local token_hash = {
             id = random_number,
             token = token,
-            bin = first_p_bits,
-            zeros = trailing_zeros,
+            bin = tonumber(first_p_bits),
+            zeros = tonumber(trailing_zeros),
             refs = key2
         }
+        local redis_key = key1 .. ":" .. token_hash.id
+        -- Updating counts vector of HllSet
+        local z_n = zero_num_to_digit(token_hash.zeros)
+        counts = update_vector(counts, token_hash.bin, z_n, "OR")
 
-        local redis_key = key1 .. ":" .. token
         table.insert(pipeline, {"HMSET", redis_key, "id", token_hash.id, "bin", token_hash.bin, "zeros", token_hash.zeros})
         table.insert(pipeline, {"SADD", redis_key .. ":tokens", token_hash.token})
         table.insert(pipeline, {"SADD", redis_key .. ":refs", token_hash.refs})
+
         pipeline_size = pipeline_size + 3
 
         if pipeline_size >= batch then
-            redis.call("MULTI")
             for _, cmd in ipairs(pipeline) do
-                redis.call(unpack(cmd))
+                local result = redis.call(unpack(cmd))
+                if not result then
+                    success = false
+                    break
+                end
             end
-            redis.call("EXEC")
+            if not success then
+                break
+            end
             pipeline = {}
             pipeline_size = 0
         end
     end
-
     -- Execute any remaining commands in the pipeline
-    if pipeline_size > 0 then
-        redis.call("MULTI")
+    if success and pipeline_size > 0 then
         for _, cmd in ipairs(pipeline) do
-            redis.call(unpack(cmd))
+            local result = redis.call(unpack(cmd))
+            if not result then
+                success = false
+                break
+            end
         end
-        redis.call("EXEC")
+    end
+    if success then
+        local json_result = cjson.encode(counts)
+        return json_result
+    else
+        return redis.error_reply("failure")
     end
 end
 

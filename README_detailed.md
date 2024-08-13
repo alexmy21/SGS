@@ -779,19 +779,38 @@ Nevertheless, there are strategies to navigate this limitation and enable a hash
 
 Alternatively, the `RENAME` command allows for reassigning a hash to a different index by modifying its key to fit an alternate pattern. This operation, which does not replicate the data, is particularly effective in scenarios where data transitions through various states or stages and requires searchability in different contexts. However, it does not support the simultaneous presence of the same hash in more than one index.
 
+## Technical References
+
+1. https://stackoverflow.com/questions/19729831/angle-between-3-points-in-3d-space
+2. https://github.com/yahoo/redislite
+3. http://bitop.luajit.org/index.html
+
 ## References
 
 1. https://mikesaint-antoine.github.io/SimpleGrad.jl/under_the_hood/
-2. https://github.com/karpathy/micrograd
+2. https://github.com/karpathy/micrograd 
 3. https://www.youtube.com/watch?v=VMj-3S1tku0
-4. https://nnfs.io/
+4. https://nnfs.io/   
 5. https://www.cnbc.com/2022/09/21/why-elon-musk-says-patents-are-for-the-weak.html 
 6. https://github.com/microsoft/autogen
 7. https://redis.io/docs/latest/commands/ttl/ 
 8. https://medium.com/javarevisited/how-redis-ttl-works-c77785d49a96 
-9. https://redis.io/blog/cache-eviction-strategies/
+9. https://redis.io/blog/cache-eviction-strategies/ 
 10. https://www.linkedin.com/pulse/caching-strategies-eviction-policies-redis-asim-hafeez/ 
 11. https://redis.io/wp-content/uploads/2021/12/caching-at-scale-with-redis-updated-2021-12-04.pdf 
+12. https://medium.com/intuition/analog-computation-of-linear-algebra-theory-and-implementation-b52209c49c1c 
+13. https://levelup.gitconnected.com/skeleton-recall-loss-is-the-new-breakthrough-in-segmentation-b1ce43c093f4 
+14. https://arxiv.org/pdf/2404.03010 (SkeletonRecall)
+15. https://github.com/MIC-DKFZ/Skeleton-Recall/blob/master/nnunetv2/inference/examples.py
+16. https://pypi.org/project/NiftyNet/
+17. https://arxiv.org/pdf/1707.03237v3 (NiftyNet paper)
+18. https://arxiv.org/pdf/2003.07311 (clDice - a Novel Topology-Preserving Loss Function)
+19. https://arxiv.org/pdf/2309.02527 (skeletonization algorithm for gradient-based optimization)
+20. https://www.nature.com/articles/s41592-020-01008-z.epdf?sharing_token=IRTK46PbU4jVyrO5lHF7gNRgN0jAjWel9jnR3ZoTv0MPk71Wg6vREldiNjHEbU89De36tbNDxGQNyPhRVlSxhGpdyXfQ2Y7Gni-kjqYmrX9f02ybBDE5znbj4_1vdV2iNyZixT9ry1IwwGNYHNthDKBUH2nlsB4T5UvoiBK3bzXb5yGOF_hxEMGJR_X0ezJEJxwd2a9D4onfzKJAqGMAowX8OhqhGgI5wBalJei_E4JoGU2MCbLlN0z53uZ8YNsyv8cxwb1YPA3uQrLybR7YxvbpANm5srQ7FoXhVtjmB-9Viw6uPpcHcJgIZ0sm1Zs92nKTMfqDFjhKoSGykSP1LA%3D%3D&tracking_referrer=levelup.gitconnected.com 
+21. https://arxiv.org/pdf/1409.0575 (ImageNet Large Scale Visual Recognition Challenge)
+22. https://en.wikipedia.org/wiki/Convolutional_neural_network#Notable_libraries 
+23. https://en.wikipedia.org/wiki/Lateral_geniculate_nucleus 
+
 
 
 

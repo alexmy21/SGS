@@ -8,6 +8,20 @@ module Util
     export sha1, ints_to_bits, bits_to_ints, l_hash, print_props, struct_to_df, 
             sha1_union, sha1_intersect, sha1_comp, sha1_xor
 
+    function vector_to_string(vec::Vector{UInt64})::String
+        # Convert the vector to a byte array
+        byte_array = reinterpret(UInt8, vec)
+        # Convert the byte array to a string
+        return String(byte_array)
+    end
+
+    function string_to_vector(str::String)::Vector{UInt64}
+        # Convert the string back to a byte array
+        byte_array = Vector{UInt8}(str)
+        # Convert the byte array back to a Vector{UInt64}
+        return reinterpret(UInt64, byte_array)
+    end
+    
     function to_blob(data::Vector{UInt64})
         byte_array = ""
         for i in 1:length(data)

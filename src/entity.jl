@@ -204,7 +204,7 @@ module HllGrad
         return d, r, n
     end
 
-    # diff backprop. It is a shortcut to run 3 backprop! functions for deleted, retained, and added
+    # diff. It is a shortcut to run 3 backprop! functions for deleted, retained, and added
     # function backprop!(entity::Entity{P}, entity_op::Operation{FuncType, ArgTypes}) where {P, FuncType<:typeof(diff), ArgTypes}
     #     if (entity.op != nothing) && (entity.op === entity_op) && (entity_op.op === diff)
     #         backprop!(entity, Operation(deleted, entity_op.args))

@@ -144,6 +144,7 @@ local function redis_rnd(token, p)
 
     -- Other operations to generate first_p_bits and trailing_zeros
     local first_p_bits = bit.rshift(unsigned_number, 32 - p)
+    local first_p_bits_integer = tonumber(first_p_bits) + 1
     local trailing_zeros = 0
     local temp = unsigned_number
     while temp > 0 and bit.band(temp, 1) == 0 do
@@ -151,7 +152,7 @@ local function redis_rnd(token, p)
         temp = bit.rshift(temp, 1)
     end
 
-    return unsigned_number, first_p_bits, trailing_zeros
+    return unsigned_number, first_p_bits_integer, trailing_zeros
 end
 
 -- Function to get a specified number of random keys
@@ -210,6 +211,9 @@ end
 --
 local function zero_num_to_digit(z_num)
     local n = tonumber(z_num)
+    if n <= 1 then
+        return 0
+    end
     return 2^(n - 1)
 end
 
@@ -224,13 +228,15 @@ end
 
 local function update_vector(vector, index, value, operation)
 
-    redis.log(redis.LOG_NOTICE, "vector: " .. tostring(vector))
-    redis.log(redis.LOG_NOTICE, "index: " .. tostring(index))
-    redis.log(redis.LOG_NOTICE, "value: " .. tostring(value))
+    -- redis.log(redis.LOG_NOTICE, "vector: " .. tostring(vector))
+    -- redis.log(redis.LOG_NOTICE, "index: " .. tostring(index))
+    -- redis.log(redis.LOG_NOTICE, "value: " .. tostring(value))
 
     -- Check if the index is within the bounds of the vector
-    if index < 1 or index > #vector then
-        error("Index out of bounds")
+    if index < 1 then
+        error("Index less than 1")
+    elseif index > #vector then
+        error("Index greatess than vector size: " .. #vector)
     end
     -- Update the element at the specified index
     if operation == "AND" then
@@ -250,71 +256,41 @@ local function ingest_01(keys, args)
     local key1  = keys[1] -- prefix for token hash
     local key2  = keys[2] -- hash key for the Entity instance or graph node (they should be the same)
     local p     = tonumber(args[1])
-    local batch = tonumber(args[2])
-    local tokens = cjson.decode(args[3])
-
-    -- Add debugging statements
-    redis.log(redis.LOG_NOTICE, "key1: " .. tostring(key1))
-    redis.log(redis.LOG_NOTICE, "key2: " .. tostring(key2))
-    redis.log(redis.LOG_NOTICE, "p: " .. tostring(p))
-    redis.log(redis.LOG_NOTICE, "batch: " .. tostring(batch))
-    redis.log(redis.LOG_NOTICE, "tokens: " .. tostring(tokens))
-
-    local pipeline = {}
-    local pipeline_size = 0
+    -- local batch = tonumber(args[2])
+    local tokens = cjson.decode(args[2])
     local size = 2^p
     local counts = create_zero_vector(size)
-
-    -- local ret_counts = cjson.encode(counts)
-    -- return ret_counts
 
     local success = true
 
     for i = 1, #tokens do
         local token = tokens[i]
-        local random_number, first_p_bits, trailing_zeros = redis_rnd(token, p)
+        
+        if #token > 2 then
+            local random_number, first_p_bits, trailing_zeros = redis_rnd(token, p)
 
-        local token_hash = {
-            id = random_number,
-            token = token,
-            bin = tonumber(first_p_bits),
-            zeros = tonumber(trailing_zeros),
-            refs = key2
-        }
-        local redis_key = key1 .. ":" .. token_hash.id
-        -- Updating counts vector of HllSet
-        local z_n = zero_num_to_digit(token_hash.zeros)
-        counts = update_vector(counts, token_hash.bin, z_n, "OR")
+            local redis_key = key1 .. random_number
+            local z_n = zero_num_to_digit(trailing_zeros)
 
-        table.insert(pipeline, {"HMSET", redis_key, "id", token_hash.id, "bin", token_hash.bin, "zeros", token_hash.zeros})
-        table.insert(pipeline, {"SADD", redis_key .. ":tokens", token_hash.token})
-        table.insert(pipeline, {"SADD", redis_key .. ":refs", token_hash.refs})
+            counts = update_vector(counts, first_p_bits, z_n, "OR")
 
-        pipeline_size = pipeline_size + 3
-
-        if pipeline_size >= batch then
-            for _, cmd in ipairs(pipeline) do
-                local result = redis.call(unpack(cmd))
-                if not result then
-                    success = false
-                    break
-                end
+            local hash_key = tostring("t:" .. redis_key)
+            local skey = tostring(redis_key .. ":toks")
+            local rkey = tostring(redis_key .. ":refs")
+            redis.call("SADD", skey, token)
+            redis.call("SADD", rkey, key2)
+            local tokens = redis.call("SMEMBERS", skey)
+            local refs = redis.call("SMEMBERS", rkey)
+            local tokens_string = table.concat(tokens, ",")
+            local refs_string = table.concat(refs, ",")
+            local tf = redis.call("HGET", hash_key, "tf")
+            -- redis.log(redis.LOG_NOTICE, "tf: " .. tostring(tf))
+            if tf == nil or not tf then
+                tf = 1
+            else
+                tf = tonumber(tf) + 1                
             end
-            if not success then
-                break
-            end
-            pipeline = {}
-            pipeline_size = 0
-        end
-    end
-    -- Execute any remaining commands in the pipeline
-    if success and pipeline_size > 0 then
-        for _, cmd in ipairs(pipeline) do
-            local result = redis.call(unpack(cmd))
-            if not result then
-                success = false
-                break
-            end
+            redis.call("HSET", hash_key, "id", random_number, "bin", first_p_bits, "zeros", trailing_zeros, "token", tokens_string, "refs", refs_string, "tf", tf)
         end
     end
     if success then
@@ -365,6 +341,60 @@ local function bit_ops(keys, args)
     return cjson.encode(result)
 end
 
+-- ==============================================================================
+-- Local functions to support Entity
+-- ==============================================================================
+
+-- Utility functions
+-- ==============================================================================
+
+local function bytes_to_int(byte_string)
+    return string.unpack(">I4", byte_string)
+end
+
+local function int_to_4bytes(int)
+    return string.pack(">I4", int)
+end
+
+local function json_vector_to_byte_string(json_vector)
+    local vector = cjson.decode(json_vector)    
+    -- Convert each integer to a 4-byte string and concatenate
+    local byte_string = ""
+    for _, int in ipairs(vector) do
+        byte_string = byte_string .. int_to_4bytes(int)
+    end    
+    return byte_string
+end
+
+local function byte_string_to_json_vector(byte_string)
+    local vector = {}
+    for i = 1, #byte_string, 4 do
+        local byte_chunk = byte_string:sub(i, i + 3)
+        local int = bytes_to_int(byte_chunk)
+        table.insert(vector, int)
+    end    
+    return cjson.encode(vector)
+end
+
+-- ==============================================================================
+-- Entity CRUD functions. All operations on Entity structure are performed in 
+-- memory in Julia environment because Lua and Redis don't have adecvate support
+-- ==============================================================================
+-- Entity in Redis is a hash with following structure:
+--  1. sha1::String
+--  2. hll::byte_string from fixed size Vector{UInt32}
+--  3. grad::Float64
+--  4. op::nil or json string representing Operation{FuncType, ArgTypes}
+-- ArgType is a tuple that lists sha1 Entities argument for given Entity
+
+
+
+
+-- ===============================================================================
+-- Function Registration
+-- ===============================================================================
+
+-- redis.register_function('UPDATETOKS', update_toks)
 redis.register_function('my_hset', my_hset)
 redis.register_function('bit_ops', bit_ops)
 redis.register_function('redis_rand', redis_rand)

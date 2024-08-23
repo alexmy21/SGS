@@ -1,4 +1,5 @@
 include("sets.jl")
+include("utils.jl")
 
 module HllGrad
 
@@ -7,7 +8,7 @@ module HllGrad
     using ..HllSets
 
     # Base functions that we're going to be overriding 
-    import Base: ==, show, union, intersect, xor, comp, copy, negation, diff, adv
+    # import Base: ==, show, union, intersect, xor, comp, copy, negation, diff, adv
 
     # Operation
     struct Operation{FuncType,ArgTypes}
@@ -112,7 +113,7 @@ module HllGrad
         op_result = Operation(comp, (a, b))
         comp_grad = HllSets.count(hll_result) / HllSets.count(a.hll)
 
-        return Entity{P}(hll_result; grad=comp.grad, op=op_result)
+        return Entity{P}(hll_result; grad=comp_grad, op=op_result)
     end
 
     # comp backprop
@@ -143,7 +144,7 @@ module HllGrad
         op_result = Operation(added, (current, previous))
         added_grad = result.grad
 
-        return Entity{P}(result.hll; grad=added.grad, op=op_result)
+        return Entity{P}(result.hll; grad=added_grad, op=op_result)
     end
 
     # added backprop
@@ -159,11 +160,11 @@ module HllGrad
     function deleted(current::Entity{P}, previous::Entity{P}) where {P} 
         length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size"))
 
-        result = comp(current.hll, previous.hll)
+        result = comp(current, previous)
         op_result = Operation(deleted, (current, previous))
         deleted_grad = result.grad
 
-        return Entity{P}(hll_result; grad=deleted_grad, op=op_result)
+        return Entity{P}(result.hll; grad=deleted_grad, op=op_result)
     end
 
     # deleted backprop
@@ -204,7 +205,7 @@ module HllGrad
         return d, r, n
     end
 
-    # diff. It is a shortcut to run 3 backprop! functions for deleted, retained, and added
+    # diff  It is a shortcut to run 3 backprop! functions for deleted, retained, and added
     # function backprop!(entity::Entity{P}, entity_op::Operation{FuncType, ArgTypes}) where {P, FuncType<:typeof(diff), ArgTypes}
     #     if (entity.op != nothing) && (entity.op === entity_op) && (entity_op.op === diff)
     #         backprop!(entity, Operation(deleted, entity_op.args))

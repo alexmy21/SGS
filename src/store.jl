@@ -1,4 +1,4 @@
-include("graph.jl")
+include("entity.jl")
 
 module Store 
 
@@ -11,9 +11,9 @@ module Store
     abstract type DataSource end
     
     #=============================================================================#
-    # Assignment, Commit, Token
+    # Assignment, Commit
     #=============================================================================#
-    struct Assignment <: HllGraph.AbstractGraphType
+    struct Assignment
         id::String
         parent::String
         item::String
@@ -37,7 +37,7 @@ module Store
     args(b::Assignment) = (b.id, b.parent, b.item, b.a_type, b.processor_id, b.lock_uuid, b.status)
 
     #-----------------------------------------------------------------------------# Commit
-    struct Commit <: HllGraph.AbstractGraphType
+    struct Commit 
         id::String
         committer_name::String
         committer_email::String

@@ -84,7 +84,7 @@ module Store
     # ingest DataFrame column by column
     #   - r:    A Ptthon object that represent Redis client
     #   - df:   The DataFrame containing the data to be ingested
-    #   - cols  A vector of columns in df to be processed
+    #   - cols: A vector of columns in df to be processed
     #   - p:    precision parameter for HllSet that defines the size of col_dataset
 
     function ingest_df(r::PyObject, tokenizer, df::DataFrame, parent::String, cols::Vector; p::Int=10, chunk_size::Int=512000)
@@ -106,7 +106,7 @@ module Store
         # start = time()
         col_dataset = zeros(2^p)
         col_json    = JSON3.write(col_dataset)
-        
+
         Threads.@sync begin 
             for chunk in chunks
                 try

@@ -252,6 +252,103 @@ local function update_vector(vector, index, value, operation)
     return vector
 end
 
+-- Performs bitwise operations on encoded as JSON strings vectors of integers
+-- 
+local function bit_ops(keys, args)
+    local vector1 = cjson.decode(args[1])
+    local vector2 = cjson.decode(args[2])
+    local operation = args[3]
+
+    local num_args = #args
+    if num_args == 3 then
+        redis.error_reply("Wrong number of arguments. Expected 3 arguments.")
+    end
+
+    local size_vector1 = #vector1
+    local size_vector2 = #vector2
+
+    if size_vector1 ~= size_vector2 then
+        redis.error_reply("Vectors provided in args[1] and args[2] must be of the same size.")
+    end
+
+    local result = {}
+
+    if operation == "AND" then
+        for i = 1, #vector1 do
+            table.insert(result, bit.band(vector1[i], vector2[i]))
+        end
+    elseif operation == "OR" then
+        for i = 1, #vector1 do
+            table.insert(result, bit.bor(vector1[i], vector2[i]))
+        end
+    elseif operation == "XOR" then
+        for i = 1, #vector1 do
+            table.insert(result, bit.bxor(vector1[i], vector2[i]))
+        end
+    else
+        return redis.error_reply("Unsupported operation")
+    end
+
+    return cjson.encode(result)
+end
+
+-- ==============================================================================
+-- Local functions to support Entity
+-- ==============================================================================
+
+-- Utility functions
+-- ==============================================================================
+
+local function bytes_to_int(byte_string)
+    if type(byte_string) == "string" and #byte_string == 4 then
+        local b1, b2, b3, b4 = byte_string:byte(1, 4)
+        return b1 * 2^24 + b2 * 2^16 + b3 * 2^8 + b4
+        -- local byte_string = tostring(byte_string) or ""
+        -- return string.unpack(">I4", byte_string)
+    else
+        return 0
+    end
+end
+
+local function int32_to_4bytes(num)
+    local bytes = {}
+    for i = 3, 0, -1 do
+        bytes[#bytes + 1] = string.char(bit.band(bit.rshift(num, i * 8), 0xFF))
+    end
+    return table.concat(bytes)
+end
+
+local function json_vector_to_byte_string(json_vector)
+    local vector = cjson.decode(json_vector)    
+    -- Convert each integer to a 4-byte string and concatenate
+    local byte_string = ""
+    for _, int in ipairs(vector) do
+        byte_string = byte_string .. int32_to_4bytes(int)
+    end    
+    return byte_string
+end
+
+local function byte_string_to_json_vector(byte_string)
+    local vector = {}
+    for i = 1, #byte_string, 4 do
+        local byte_chunk = byte_string:sub(i, i + 3)
+        local int = bytes_to_int(byte_chunk)
+        table.insert(vector, i, int)
+    end    
+    return vector
+end
+
+-- ==============================================================================
+-- Entity CRUD functions. All operations on Entity structure are performed in 
+-- memory in Julia environment because Lua and Redis don't have adecvate support
+-- ==============================================================================
+-- Entity in Redis is a hash with following structure:
+--  1. sha1::String
+--  2. hll::byte_string from fixed size Vector{UInt32}
+--  3. grad::Float64
+--  4. op::nil or json string representing Operation{FuncType, ArgTypes}
+-- ArgType is a tuple that lists sha1 Entities argument for given Entity
+
 local function ingest_01(keys, args)
     local key1  = keys[1] -- prefix for token hash
     local key2  = keys[2] -- hash key for the Entity instance or graph node (they should be the same)
@@ -301,101 +398,40 @@ local function ingest_01(keys, args)
     end
 end
 
--- Performs bitwise operations on encoded as JSON strings vectors of integers
--- 
-local function bit_ops(keys, args)
-    local vector1 = cjson.decode(args[1])
-    local vector2 = cjson.decode(args[2])
-    local operation = args[3]
+local function store_entity(keys, args)
+    local prefix    = keys[1]
 
-    local num_args = #args
-    if num_args == 3 then
-        redis.error_reply("Wrong number of arguments. Expected 3 arguments.")
-    end
+    local sha1      = tostring(args[1])
+    local dataset   = json_vector_to_byte_string(args[2])
+    local grad      = tonumber(args[3])
+    local op_op     = tostring(args[4])
+    local op_args   = cjson.decode(args[5])
 
-    local size_vector1 = #vector1
-    local size_vector2 = #vector2
+    local hash_key  = tostring(prefix .. ":" .. sha1)
+    -- local data_str  = json_vector_to_byte_string(dataset)
+    local op_argstr = table.concat(op_args, ",")
 
-    if size_vector1 ~= size_vector2 then
-        redis.error_reply("Vectors provided in args[1] and args[2] must be of the same size.")
-    end
+    redis.call("HSET", hash_key, "id", sha1, "dataset", dataset, "op_op", op_op, "op_args", op_argstr)
 
-    local result = {}
-
-    if operation == "AND" then
-        for i = 1, #vector1 do
-            table.insert(result, bit.band(vector1[i], vector2[i]))
-        end
-    elseif operation == "OR" then
-        for i = 1, #vector1 do
-            table.insert(result, bit.bor(vector1[i], vector2[i]))
-        end
-    elseif operation == "XOR" then
-        for i = 1, #vector1 do
-            table.insert(result, bit.bxor(vector1[i], vector2[i]))
-        end
-    else
-        return redis.error_reply("Unsupported operation")
-    end
-
-    return cjson.encode(result)
+    return "OK"
 end
 
--- ==============================================================================
--- Local functions to support Entity
--- ==============================================================================
+local function retrieve_entity(keys, args)
+    local prefix    = keys[1]
+    local sha1      = tostring(args[1])
+    local hash_key  = tostring(prefix .. ":" .. sha1)
 
--- Utility functions
--- ==============================================================================
-
-local function bytes_to_int(byte_string)
-    return string.unpack(">I4", byte_string)
+    return redis.call("HGETALL", hash_key)    
 end
-
-local function int_to_4bytes(int)
-    return string.pack(">I4", int)
-end
-
-local function json_vector_to_byte_string(json_vector)
-    local vector = cjson.decode(json_vector)    
-    -- Convert each integer to a 4-byte string and concatenate
-    local byte_string = ""
-    for _, int in ipairs(vector) do
-        byte_string = byte_string .. int_to_4bytes(int)
-    end    
-    return byte_string
-end
-
-local function byte_string_to_json_vector(byte_string)
-    local vector = {}
-    for i = 1, #byte_string, 4 do
-        local byte_chunk = byte_string:sub(i, i + 3)
-        local int = bytes_to_int(byte_chunk)
-        table.insert(vector, int)
-    end    
-    return cjson.encode(vector)
-end
-
--- ==============================================================================
--- Entity CRUD functions. All operations on Entity structure are performed in 
--- memory in Julia environment because Lua and Redis don't have adecvate support
--- ==============================================================================
--- Entity in Redis is a hash with following structure:
---  1. sha1::String
---  2. hll::byte_string from fixed size Vector{UInt32}
---  3. grad::Float64
---  4. op::nil or json string representing Operation{FuncType, ArgTypes}
--- ArgType is a tuple that lists sha1 Entities argument for given Entity
-
-
-
 
 -- ===============================================================================
 -- Function Registration
 -- ===============================================================================
 
 -- redis.register_function('UPDATETOKS', update_toks)
-redis.register_function('my_hset', my_hset)
-redis.register_function('bit_ops', bit_ops)
-redis.register_function('redis_rand', redis_rand)
-redis.register_function('ingest_01', ingest_01)
+redis.register_function('my_hset',      my_hset)
+redis.register_function('bit_ops',      bit_ops)
+redis.register_function('redis_rand',   redis_rand)
+redis.register_function('ingest_01',    ingest_01)
+redis.register_function('store_entity', store_entity)
+redis.register_function('retrieve_entity', retrieve_entity)

@@ -303,8 +303,6 @@ local function bytes_to_int(byte_string)
     if type(byte_string) == "string" and #byte_string == 4 then
         local b1, b2, b3, b4 = byte_string:byte(1, 4)
         return b1 * 2^24 + b2 * 2^16 + b3 * 2^8 + b4
-        -- local byte_string = tostring(byte_string) or ""
-        -- return string.unpack(">I4", byte_string)
     else
         return 0
     end
@@ -402,16 +400,17 @@ local function store_entity(keys, args)
     local prefix    = keys[1]
 
     local sha1      = tostring(args[1])
-    local dataset   = json_vector_to_byte_string(args[2])
-    local grad      = tonumber(args[3])
-    local op_op     = tostring(args[4])
-    local op_args   = cjson.decode(args[5])
+    local card      = tonumber(args[2])
+    local dataset   = json_vector_to_byte_string(args[3])
+    local grad      = tonumber(args[4])
+    local op_op     = tostring(args[5])
+    local op_args   = cjson.decode(args[6])
 
     local hash_key  = tostring(prefix .. ":" .. sha1)
     -- local data_str  = json_vector_to_byte_string(dataset)
     local op_argstr = table.concat(op_args, ",")
 
-    redis.call("HSET", hash_key, "id", sha1, "dataset", dataset, "op_op", op_op, "op_args", op_argstr)
+    redis.call("HSET", hash_key, "id", sha1, "card", card, "dataset", dataset, "op_op", op_op, "op_args", op_argstr)
 
     return "OK"
 end

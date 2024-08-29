@@ -68,7 +68,7 @@ module HllSets
     export HllSet, add!, count, union, intersect, diff, 
         isequal, isempty, id, delta, getbin, getzeros, maxidx, match, cosine, dump, restore
 
-   
+
     struct HllSet{P}
         counts::Vector{BitVector}
         function HllSet{P}() where {P}
@@ -516,7 +516,16 @@ module HllSets
         return z
     end
 
-    function restore(z::HllSet{P}, x::String) where {P} 
+    function restore(z::HllSet{P}, x::String) where {P}
+        # For safety - this is also enforced in the HLL constructor
+        if P < 4 || P > 18
+            error("We only have restore for P ∈ 4:18")
+        end
+        dataset = JSON3.read(x, Vector{UInt64})
+        return restore(z, dataset)
+    end
+
+    function restore_spase(z::HllSet{P}, x::String) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have restore for P ∈ 4:18")

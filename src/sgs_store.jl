@@ -1,7 +1,7 @@
-include("entity.jl")
+include("sgs_entity.jl")
 
 module Store
-    using ..HllGrad
+    using ..Entity
     using ..HllSets
     using ..Util
 

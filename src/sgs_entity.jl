@@ -52,7 +52,7 @@ module Entity
         return r.fcall("store_entity", 1, prefix, sha1, card, dataset, 0, op_op(op), args), sha1
     end
 
-    function parse_entity_output(output::Vector{Any})
+    function parse_entity_output(output::Vector)
         # Initialize an empty dictionary
         result = Dict{String, Any}() 
         println(output)       

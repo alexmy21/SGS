@@ -424,6 +424,100 @@ local function retrieve_entity(keys, args)
 end
 
 -- ===============================================================================
+-- Scanning and retrieving tokens
+-- ===============================================================================
+-- Function to check if a specific reference is in the refs field
+local function ref_in_refs(refs, ref)
+    for token in string.gmatch(refs, '([^,]+)') do
+        if token == ref then
+            return true
+        end
+    end
+    return false
+end
+
+-- Function to convert a space-separated string into a Lua table
+local function split_string_to_table(str)
+    local t = {}
+    for word in string.gmatch(str, "%S+") do
+        table.insert(t, word)
+    end
+    return t
+end
+
+-- Function to check if there is a non-empty intersection between refs and specific_refs
+local function has_intersection(refs, specific_refs)
+    local refs_set = {}
+    local t = split_string_to_table(specific_refs)
+    for token in string.gmatch(refs, '([^,]+)') do
+        refs_set[token] = true
+    end
+    for _, ref in ipairs(t) do
+        if refs_set[ref] then
+            return true
+        end
+    end
+    return false
+end
+
+-- Function to evaluate a condition
+local function evaluate_condition(value, operator, compare_value)
+    if operator == "==" then
+        return value == compare_value
+    elseif operator == ">" then
+        return tonumber(value) > tonumber(compare_value)
+    elseif operator == "<" then
+        return tonumber(value) < tonumber(compare_value)
+    elseif operator == "!=" then
+        return value ~= compare_value
+    elseif operator == "has" then
+        return ref_in_refs(value, compare_value)
+    elseif operator == "match" then
+        return has_intersection(value, compare_value)
+    else
+        return false
+    end
+end
+
+-- Function to check if a hash satisfies all conditions
+local function satisfies_conditions(key, conditions)
+    for i = 1, #conditions, 3 do
+        local field = conditions[i]
+        local operator = conditions[i + 1]
+        local compare_value = conditions[i + 2]
+        local value = redis.call("HGET", key, field)
+        if not value or not evaluate_condition(value, operator, compare_value) then
+            return false
+        end
+    end
+    return true
+end
+
+local function retrieve_tokens(keys, args)
+    local prefix = keys[1]
+    local conditions = args
+
+    local cursor = "0"
+    local matching_keys = {}
+
+    repeat
+        local result = redis.call("SCAN", cursor, "MATCH", prefix .. "*")
+        cursor = result[1]
+        local keys = result[2]
+
+        for _, key in ipairs(keys) do
+            if satisfies_conditions(key, conditions) then
+                -- table.insert(matching_keys, key)
+                local tf_value = redis.call("HGET", key, "tf")
+                table.insert(matching_keys, {key, tf_value})
+            end
+        end
+    until cursor == "0"
+
+    return matching_keys
+end
+
+-- ===============================================================================
 -- Function Registration
 -- ===============================================================================
 
@@ -434,3 +528,4 @@ redis.register_function('redis_rand',   redis_rand)
 redis.register_function('ingest_01',    ingest_01)
 redis.register_function('store_entity', store_entity)
 redis.register_function('retrieve_entity', retrieve_entity)
+redis.register_function('retrieve_tokens', retrieve_tokens)

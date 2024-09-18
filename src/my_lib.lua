@@ -396,6 +396,61 @@ local function ingest_01(keys, args)
     end
 end
 
+-- Function to get the current time in UTC from Redis
+local function get_utc_time()
+    local time = redis.call('TIME')
+    local seconds = tonumber(time[1])
+    local microseconds = tonumber(time[2])
+    
+    -- Calculate the date components
+    local year, month, day, hour, min, sec = 1970, 1, 1, 0, 0, seconds
+    local days_in_month = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+    
+    -- Calculate year
+    while sec >= 31536000 do
+        if (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0) then
+            sec = sec - 31622400  -- Leap year
+        else
+            sec = sec - 31536000  -- Non-leap year
+        end
+        year = year + 1
+    end
+    
+    -- Adjust for leap year
+    if (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0) then
+        days_in_month[2] = 29
+    end
+    
+    -- Calculate month
+    for i = 1, 12 do
+        if sec >= days_in_month[i] * 86400 then
+            sec = sec - days_in_month[i] * 86400
+            month = month + 1
+        else
+            break
+        end
+    end
+    
+    -- Calculate day
+    day = day + math.floor(sec / 86400)
+    sec = sec % 86400
+    
+    -- Calculate hour
+    hour = hour + math.floor(sec / 3600)
+    sec = sec % 3600
+    
+    -- Calculate minute
+    min = min + math.floor(sec / 60)
+    sec = sec % 60
+    
+    -- Format the time as YYYY-MM-DDTHH:MM:SS.ssssssZ
+    local formatted_time = string.format(
+        "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ",
+        year, month, day, hour, min, sec, microseconds
+    )
+    return formatted_time
+end
+
 local function store_entity(keys, args)
     local prefix    = keys[1]
 
@@ -407,10 +462,16 @@ local function store_entity(keys, args)
     local op_args   = cjson.decode(args[6])
 
     local hash_key  = tostring(prefix .. ":" .. sha1)
+    local crnt_date = get_utc_time()
+
     -- local data_str  = json_vector_to_byte_string(dataset)
     local op_argstr = table.concat(op_args, ",")
 
-    redis.call("HSET", hash_key, "id", sha1, "card", card, "dataset", dataset, "op_op", op_op, "op_args", op_argstr)
+    if redis.call('EXISTS', hash_key) == 0 then
+        redis.call("HSET", hash_key, "id", sha1, "card", card, "dataset", dataset, "op_op", op_op, "op_args", op_argstr, "__created__", crnt_date)
+    else
+        redis.call("HSET", hash_key, "id", sha1, "card", card, "dataset", dataset, "op_op", op_op, "op_args", op_argstr)
+    end
 
     return "OK"
 end
@@ -493,7 +554,7 @@ local function satisfies_conditions(key, conditions)
     return true
 end
 
-local function retrieve_tokens(keys, args)
+local function retrieve_keys(keys, args)
     local prefix = keys[1]
     local conditions = args
 
@@ -518,14 +579,186 @@ local function retrieve_tokens(keys, args)
 end
 
 -- ===============================================================================
+-- Redis stack built on on Redis LIST
+--================================================================================
+-- Function to push an element onto the stack
+-- KEYS[1] - the key of the list (prefix:sha1)
+-- ARGV[1] - the element to push
+local function push(stack_key, element)
+    -- Get the length of the list
+    local length = redis.call('LLEN', stack_key)
+    -- Get the current top element
+    local top_element = redis.call('LINDEX', stack_key, length - 1)
+    -- Check if the element is the same as the top element
+    if top_element == element then
+        return nil
+    end
+    -- Add the element to the list (push to the left)
+    redis.call('RPUSH', stack_key, element)
+end
+
+-- Function to pop an element from the stack
+-- KEYS[1] - the key of the list (prefix:sha1)
+local function pop(stack_key)
+    -- Remove and return the top element (pop from the left)
+    return redis.call('RPOP', stack_key)
+end
+
+-- Function to get the top element of the stack
+-- KEYS[1] - the key of the list (prefix:sha1)
+local function top(stack_key)
+    -- Get the length of the list
+    local length = redis.call('LLEN', stack_key)
+    -- Get the element at the last index (length - 1)
+    return redis.call('LINDEX', stack_key, length - 1)
+end
+
+local function stack(keys, args)
+    -- Determine which operation to perform based on the input arguments
+    local stack_key = keys[1]
+    local operation = args[1]
+    local element   = args[2]
+
+    if operation == 'push' then
+        return push(stack_key, element)
+    elseif operation == 'pop' then
+        return pop(stack_key)
+    elseif operation == 'top' then
+        return top(stack_key)
+    else
+        return redis.error_reply('Invalid operation')
+    end
+end 
+
+-- ===============================================================================
+-- SGS DataStore
+-- ===============================================================================
+
+-- Initialize the data store
+local function init_data_store()
+    redis.call('DEL', 'data_store:data', 'data_store:commits', 'data_store:branches', 'data_store:current_branch')
+    redis.call('HSET', 'data_store:data', 'initialized', 'true')
+    redis.call('HSET', 'data_store:branches', 'main', '[]')
+    redis.call('SET', 'data_store:current_branch', 'main')
+end
+
+-- Function to get the current timestamp
+local function get_timestamp()
+    local time = redis.call('TIME')
+    return time[1] .. time[2]
+end
+
+-- Function to commit data
+local function commit(prefix, message)
+    -- Get all keys with the "wb" prefix
+    local keys = redis.call('KEYS', prefix .. "*")
+    local timestamp = get_timestamp()
+
+    for _, key in ipairs(keys) do
+        -- Remove the "wb" prefix
+        local new_key = string.gsub(key, "^" .. prefix, "")
+
+        -- Check if a hash with the same key already exists
+        if redis.call('EXISTS', new_key) == 1 then
+            -- Rename the existing key by adding the prefix "tail:<timestamp>:"
+            local tail_key = "tail:" .. timestamp .. ":" .. new_key
+            redis.call('RENAME', new_key, tail_key)
+        end
+
+        -- Rename the key to remove the "wb" prefix
+        redis.call('RENAME', key, new_key)
+    end
+
+    -- Log the commit message
+    local commit_entry = {message = message, timestamp = timestamp}
+    redis.call('RPUSH', 'commits', cjson.encode(commit_entry))
+
+    return "Committed: " .. message
+end
+
+-- Commit the current state of the data with a commit message
+-- local function commit(message)
+--     local data = redis.call('HGETALL', 'data_store:data')
+--     local commit_data = {}
+--     for i = 1, #data, 2 do
+--         commit_data[data[i]] = data[i + 1]
+--     end
+--     local commit_entry = cjson.encode({data = commit_data, message = message, timestamp = redis.call('TIME')})
+--     redis.call('RPUSH', 'data_store:commits', commit_entry)
+--     redis.call('RPUSH', 'data_store:branches:main', commit_entry)
+--     return "Committed: " .. message
+-- end
+
+-- Checkout a previous commit by index
+local function checkout(commit_index)
+    local commit_entry = redis.call('LINDEX', 'data_store:commits', commit_index - 1)
+    if commit_entry then
+        local commit_data = cjson.decode(commit_entry).data
+        redis.call('DEL', 'data_store:data')
+        for k, v in pairs(commit_data) do
+            redis.call('HSET', 'data_store:data', k, v)
+        end
+        return "Checked out commit: " .. cjson.decode(commit_entry).message
+    else
+        return "Invalid commit index"
+    end
+end
+
+-- Create a new branch
+local function create_branch(branch_name)
+    local commits = redis.call('LRANGE', 'data_store:commits', 0, -1)
+    redis.call('HSET', 'data_store:branches', branch_name, cjson.encode(commits))
+    return "Branch created: " .. branch_name
+end
+
+-- Merge a branch into the current branch
+local function merge_branch(branch_name)
+    local branch_commits = redis.call('HGET', 'data_store:branches', branch_name)
+    if branch_commits then
+        local branch_commits_decoded = cjson.decode(branch_commits)
+        for _, commit in ipairs(branch_commits_decoded) do
+            redis.call('RPUSH', 'data_store:commits', commit)
+        end
+        return "Merged branch: " .. branch_name
+    else
+        return "Branch not found: " .. branch_name
+    end
+end
+
+local function sgs_vc(keys, args)
+    -- Determine which operation to perform based on the input arguments
+    local operation = args[1]
+    if operation == 'init_data_store' then
+        return init_data_store()
+    elseif operation == 'commit' then
+        local prefix = args[2]
+        local message = args[3]
+        return commit(prefix, message)
+    elseif operation == 'checkout' then
+        local commit_index = tonumber(args[2])
+        return checkout(commit_index)
+    elseif operation == 'create_branch' then
+        local branch_name = args[2]
+        return create_branch(branch_name)
+    elseif operation == 'merge_branch' then
+        local branch_name = args[2]
+        return merge_branch(branch_name)
+    else
+        return redis.error_reply('Invalid operation')
+    end
+end
+
+-- ===============================================================================
 -- Function Registration
 -- ===============================================================================
 
 -- redis.register_function('UPDATETOKS', update_toks)
-redis.register_function('my_hset',      my_hset)
-redis.register_function('bit_ops',      bit_ops)
-redis.register_function('redis_rand',   redis_rand)
-redis.register_function('ingest_01',    ingest_01)
-redis.register_function('store_entity', store_entity)
-redis.register_function('retrieve_entity', retrieve_entity)
-redis.register_function('retrieve_tokens', retrieve_tokens)
+redis.register_function('my_hset',          my_hset)
+redis.register_function('bit_ops',          bit_ops)
+redis.register_function('redis_rand',       redis_rand)
+redis.register_function('ingest_01',        ingest_01)
+redis.register_function('store_entity',     store_entity)
+redis.register_function('retrieve_entity',  retrieve_entity)
+redis.register_function('retrieve_keys',    retrieve_keys)
+redis.register_function('stack',            stack)
+redis.register_function('sgs_vc',           sgs_vc)

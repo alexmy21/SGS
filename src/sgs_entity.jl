@@ -3,9 +3,10 @@ include("utils.jl")
 
 module Entity
 
-    export Instance
+    export Instance, store_entity, retrieve_entity
 
     using ..HllSets
+    using ..Util
 
     using JSON3
     using PyCall
@@ -38,10 +39,11 @@ module Entity
         end
     end
 
-    function store_entity(r::PyObject, card::Int, hll::HllSets.HllSet{P}; grad=0.0, op=nothing,  prefix::String="b") where P
-        sha1 = string(HllSets.id(hll))
+    function store_entity(r::PyObject, hll::HllSets.HllSet{P}; grad=0.0, op=nothing,  prefix::String="b") where P
+        sha1    = string(HllSets.id(hll))
+        card    = string(HllSets.count(hll))
         dataset = JSON3.write(HllSets.dump(hll))
-        args = JSON3.write(op_args(op))
+        args    = JSON3.write(op_args(op))
         # println(args)
         return r.fcall("store_entity", 1, prefix, sha1, card, dataset, 0, op_op(op), args), sha1
     end
@@ -76,7 +78,7 @@ module Entity
         return result
     end
 
-    function retrieve_entity(sha1::String; r::PyObject=r,  prefix::String="b")
+    function retrieve_entity(r::PyObject, sha1::String, prefix::String="b")
         output = r.fcall("retrieve_entity", 1, prefix, sha1)
         json = parse_entity_output(output)
     end
@@ -97,19 +99,33 @@ module Entity
 
         # Constructor with keyword arguments
         # By default new instance is created in buffer (prefix = "b")
-        function Instance{P}(r::PyObject, hll::HllSets.HllSet{P}; grad=0.0, op=nothing, prefix::String="b") where {P}
-            card = HllSets.count(hll)
-            response, sha1 = store_entity(r, card, hll, grad=grad, op=op, prefix=prefix)
-            new{P}(sha1, card, hll, grad, op)
-        end
+        # function Instance{P}(# r::PyObject, 
+        #     hll::HllSets.HllSet{P}; grad=0.0, op=nothing, prefix::String="entity") where {P}
+        #     card = HllSets.count(hll)
+        #     # response, sha1 = store_entity(r, card, hll, grad=grad, op=op, prefix=prefix)
+        #     new{P}(sha1, card, hll, grad, op)
+        # end
 
-        function Instance{P}(hll::HllSets.HllSet{P}; grad=0.0, op=nothing, prefix::String="b") where {P}
+        function Instance{P}(hll::HllSets.HllSet{P}; grad=0.0, op=nothing, prefix::String="entity") where {P}
             # response, sha1 = store_entity(r, hll, grad=grad, op=op, prefix=prefix)
             card = HllSets.count(hll)
             sha1 = HllSets.id(hll)
             new{P}(sha1, card, hll, grad, op)
         end
     end
+
+
+    function store_entity(r::PyObject, entity::Instance{P}; prefix::String="b") where P
+        sha1    = entity.sha1
+        card    = entity.card
+        hll     = entity.hll
+        dataset = JSON3.write(HllSets.dump(hll))
+        op      = entity.op
+        args    = JSON3.write(op_args(op))
+        # println(args)
+        return r.fcall("store_entity", 1, prefix, sha1, card, dataset, 0, op_op(op), args), sha1
+    end
+
 
     function Base.show(io::IO, instance::Instance)
         sha1_str = instance.sha1 === nothing ? "nothing" : string(instance.sha1)
@@ -129,19 +145,19 @@ module Entity
     #------------------------------------------------------------
     # Set of Instance operations to support Static Entity Structure
     #------------------------------------------------------------
-    function copy(r::PyObject, a::Instance{P}) where {P}
-        return Instance{P}(r, HllSets.copy!(a.hll); grad=a.grad, op=a.op)
+    function copy(a::Instance{P}) where {P}
+        return Instance{P}(HllSets.copy!(a.hll); grad=a.grad, op=a.op)
     end
 
     # negation
-    function negation(r::PyObject, a::Instance{P}) where {P}
-        return Instance{P}(r, HllSets.copy!(a.hll); grad=-a.grad, op=a.op)
+    function negation(a::Instance{P}) where {P}
+        return Instance{P}(HllSets.copy!(a.hll); grad=-a.grad, op=a.op)
     end
     # union
-    function union(r::PyObject, a::Instance{P}, b::Instance{P}) where {P}
+    function union(a::Instance{P}, b::Instance{P}) where {P}
         hll_result = HllSets.union(a.hll, b.hll)
         op_result = Operation(union, [a, b])
-        return Instance{P}(r, hll_result; grad=0.0, op=op_result)
+        return Instance{P}(hll_result; grad=0.0, op=op_result)
     end
 
     # union backprop
@@ -156,10 +172,10 @@ module Entity
     end
 
     # intersect - intersection
-    function intersect(r::PyObject, a::Instance{P}, b::Instance{P}) where {P}
+    function intersect(a::Instance{P}, b::Instance{P}) where {P}
         hll_result = HllSets.intersect(a.hll, b.hll)
         op_result = Operation(intersect, [a, b])
-        return Instance{P}(r, hll_result; grad=0.0, op=op_result)
+        return Instance{P}(hll_result; grad=0.0, op=op_result)
     end
 
     # intersect backprop
@@ -173,10 +189,10 @@ module Entity
     end
 
     # xor 
-    function xor(r::PyObject, a::Instance{P}, b::Instance{P}) where {P}
+    function xor(a::Instance{P}, b::Instance{P}) where {P}
         hll_result = HllSets.set_xor(a.hll, b.hll)
         op_result = Operation(xor, [a, b])
-        return Instance{P}(r, hll_result; grad=0.0, op=op_result)
+        return Instance{P}(hll_result; grad=0.0, op=op_result)
     end
 
     # xor backprop
@@ -223,7 +239,7 @@ module Entity
         - set_added - returns the elements that are in the current set but not in the previous
         - set_deleted - returns the elements that are in the previous set but not in the current
     """
-    function added(r::PyObject, current::Instance{P}, previous::Instance{P}) where {P} 
+    function added(current::Instance{P}, previous::Instance{P}) where {P} 
         length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size"))
         
         result = comp(previous, current)
@@ -231,7 +247,7 @@ module Entity
         op_result = Operation(added, [current, previous])
         added_grad = result.grad
 
-        return Instance{P}(r, result.hll; grad=added_grad, op=op_result)
+        return Instance{P}(result.hll; grad=added_grad, op=op_result)
     end
 
     # added backprop
@@ -244,14 +260,14 @@ module Entity
         end
     end
 
-    function deleted(r::PyObject, current::Instance{P}, previous::Instance{P}) where {P} 
+    function deleted(current::Instance{P}, previous::Instance{P}) where {P} 
         length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size"))
 
         result = comp(current, previous)
         op_result = Operation(deleted, [current, previous])
         deleted_grad = result.grad
 
-        return Instance{P}(r, result.hll; grad=deleted_grad, op=op_result)
+        return Instance{P}(result.hll; grad=deleted_grad, op=op_result)
     end
 
     # deleted backprop
@@ -264,14 +280,14 @@ module Entity
         end
     end
 
-    function retained(r::PyObject, current::Instance{P}, previous::Instance{P}) where {P} 
+    function retained(current::Instance{P}, previous::Instance{P}) where {P} 
         length(previous.hll.counts) == length(current.hll.counts) || throw(ArgumentError("HllSet{P} must have same size"))
         
         hll_result = HllSets.intersect(current.hll, previous.hll)
         op_result = Operation(retained, [current, previous])
         retained_grad = HllSets.count(hll_result) / HllSets.count(HllSets.union(current.hll, previous.hll))
 
-        return Instance{P}(r, hll_result; grad=retained_grad, op=op_result)
+        return Instance{P}(hll_result; grad=retained_grad, op=op_result)
     end
 
     # retained backprop
@@ -285,18 +301,18 @@ module Entity
     end
 
     # difference - diff 
-    function diff(r::PyObject, a::Instance{P}, b::Instance{P}) where {P}
-        d = deleted(r, a, b)
-        rt = retained(r, a, b)
-        n = added(r, a, b)
+    function diff(a::Instance{P}, b::Instance{P}) where {P}
+        d = deleted(a, b)
+        rt = retained(a, b)
+        n = added(a, b)
         return d, rt, n
     end
 
     # advance - Allows us to calculate the gradient for the advance operation
     # We are using 'advance' name to reflect the transformation of the set 
     # from the previous state to the current state
-    function advance(r::PyObject, a::Instance{P}, b::Instance{P}) where {P}
-        d, rt, n = diff(r, a, b)
+    function advance(a::Instance{P}, b::Instance{P}) where {P}
+        d, rt, n = diff(a, b)
         hll_res = HllSets.union(n.hll, rt.hll)
         op_result = Operation(advance, [d, rt, n])
         # calculate the gradient for the advance operation as 
@@ -306,7 +322,7 @@ module Entity
         grad_res = HllSets.count(a.hll) / HllSets.count(b.hll)  # This is the simplest way to calculate the gradient
         
         # Create updated version of the Instance
-        return Instance{P}(r, hll_res; grad=grad_res, op=op_result)
+        return Instance{P}(hll_res; grad=grad_res, op=op_result)
     end
 
     """ 
@@ -322,17 +338,17 @@ module Entity
                     - op.args[3] - added set
         We are going to use this information to construct the new set that represents the unknown state of the set.
     """
-    function advance(r::PyObject, ::Colon; b::Instance{P}) where {P}
+    function advance(::Colon; b::Instance{P}) where {P}
         # Create a new empty set
         a = HllSets.create(b.hll)
-        d, rt, n = diff(r, a, b)
+        d, rt, n = diff(a, b)
         op_result = Operation(advance, [d, rt, n])
         # calculate the gradient for the advance operation as 
         # the number of elements in the a set
         grad_res = HllSets.count(a.hll)  # This is the simplest way to calculate the gradient
         
         # Create updated version of the instance
-        return Instance{P}(r, hll_res; grad=grad_res, op=op_result)
+        return Instance{P}(hll_res; grad=grad_res, op=op_result)
     end
 
     function backprop!(instance::Instance{P}, instance_op::Operation{FuncType}) where {P, FuncType<:typeof(advance)}

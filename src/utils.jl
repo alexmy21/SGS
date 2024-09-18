@@ -118,16 +118,10 @@ module Util
     #     return digest(h)
     # end 
 
-    # function sha1(x::Vector{String})
-    #     # Create a SHA1 hash object
-    #     h = SHA1()
-    #     # Update the hash object with the input
-    #     for i in 1:length(x)
-    #         update!(h, x[i])
-    #     end
-    #     # Return the hash
-    #     return digest(h)
-    # end
+    function sha1(x::Vector{String})
+        strings = join(x, "")
+        return bytes2hex(SHA.sha1(strings))
+    end
 
     function remove_random_bits(bitvectors::Vector{BitVector}, N::Int)
         # Filter out empty BitVectors

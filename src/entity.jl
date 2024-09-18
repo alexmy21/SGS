@@ -6,6 +6,7 @@ module Entity
     export Instance
 
     using ..HllSets
+    using ..Util
 
     # Base functions that we're going to be overriding 
     # import Base: ==, show, union, intersect, xor, comp, copy, negation, diff, adv

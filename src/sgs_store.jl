@@ -8,11 +8,11 @@ module Store
     using PyCall
     using CSV
     using DataFrames
-    using WordTokenizers
+    # using WordTokenizers
 
     using JSON3
     using TextAnalysis
-    using WordTokenizers
+    # using WordTokenizers
     using Base.Threads
 
     # Define the data store and version control structures
@@ -82,7 +82,7 @@ module Store
     end
 
     # ingest DataFrame column by column
-    #   - r:    A Ptthon object that represent Redis client
+    #   - r:    A Python object that represent Redis client
     #   - df:   The DataFrame containing the data to be ingested
     #   - cols: A vector of columns in df to be processed
     #   - p:    precision parameter for HllSet that defines the size of col_dataset
@@ -102,39 +102,78 @@ module Store
         end
     end
 
-    function ingest_df_column(r::PyObject, tokenizer, chunks, col_sha1::String; p::Int=10)
-        # start = time()
-        col_dataset = zeros(2^p)
-        col_json    = JSON3.write(col_dataset)
+    # Function to extract tokens using the Transformers tokenizer
+    # function extract_tokens(tokenizer::PyObject, text::String)
+    #     tokens = tokenizer.tokenize(text)
+    #     return tokens
+    # end
 
-        Threads.@sync begin 
-            for chunk in chunks
-                try
-                    Threads.@spawn begin                    
-                        # @info "$(chunk): Spawned $(time() - start)"
-                        local_batch = Vector{String}()
-                        for value in chunk
-                            if value !== missing && value !== nothing
-                                str_value   = string(value)
-                                str_value   = String(str_value)                               
-                                tokens      = tokenizer(str_value)
-                                append!(local_batch, tokens)
-                            end
-                        end
-                        if !isempty(local_batch) 
-                            unique_tokens   = Set(local_batch)
-                            tokens          = JSON3.write(collect(unique_tokens))
-                            result_json     = r.fcall("ingest_01", 2, "", col_sha1, p, tokens)
-                            col_json        = r.fcall("bit_ops", 0, col_json, result_json, "OR")                        
-                        end
-                        # @info "$(chunk): Finished $(time() - start)"
-                    end
-                catch e 
-                    println("chunk: ", chunk)
-                end
-            end
-        end
-        # println(col_json)
-        return JSON3.read(col_json)
+    # Get the absolute path to the src directory
+    # src_dir = abspath(joinpath(@__DIR__, "..", "src"))
+    # println("src_dir: ", src_dir)
+
+    # # Import the tokenize_text function from the Python script
+    # py"""
+    # import sys
+    # sys.path.append("$src_dir")
+    # from tokenize_text import tokenize_text
+    # """
+
+    # function ingest_df_column(r::PyObject, chunks, col_sha1::String; p::Int=10)
+    #     # start = time()
+    #     col_dataset = zeros(2^p)
+    #     col_json    = JSON3.write(col_dataset)
+
+    #     Threads.@sync begin 
+    #         for chunk in chunks
+    #             try
+    #                 Threads.@spawn begin                    
+    #                     # @info "$(chunk): Spawned $(time() - start)"
+    #                     local_batch = Vector{String}()
+    #                     for value in chunk
+    #                         if value !== missing && value !== nothing
+    #                             str_value   = string(value)
+    #                             str_value   = String(str_value)                               
+    #                             # tokens      = extract_tokens(tokenizer, str_value)
+    #                             tokens = py"tokenize_text"(str_value)
+    #                             append!(local_batch, tokens)
+    #                         end
+    #                     end
+    #                     if !isempty(local_batch) 
+    #                         unique_tokens   = Set(local_batch)
+    #                         tokens          = JSON3.write(collect(unique_tokens))
+    #                         result_json     = r.fcall("ingest_01", 2, "", col_sha1, p, tokens)
+    #                         col_json        = r.fcall("bit_ops", 0, col_json, result_json, "OR")                        
+    #                     end
+    #                     # @info "$(chunk): Finished $(time() - start)"
+    #                 end
+    #             catch e 
+    #                 println("chunk: ", chunk)
+    #             end
+    #         end
+    #     end
+    #     # println(col_json)
+    #     return JSON3.read(col_json)
+    # end
+
+    function retrieve_entity(r::PyObject, prefix::String, sha1::String)
+        return r.fcall("retrieve_entity", 1, prefix, sha1)
     end
+
+    # =========================================================================
+    # Redis stack built using list commands
+    # =========================================================================
+
+    function stack_push(r::PyObject, prefix::String, sha1::String, element::String)
+        return r.fcall("stack", 1, prefix * sha1, "push", element)
+    end
+
+    function stack_top(r::PyObject, prefix::String, sha1::String)
+        return r.fcall("stack", 1, prefix * sha1, "top", "")
+    end
+
+    function stack_pop(r::PyObject, prefix::String, sha1::String)
+        return r.fcall("stack", 1, prefix * sha1, "pop", "")
+    end
+
 end

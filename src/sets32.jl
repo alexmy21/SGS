@@ -446,6 +446,7 @@ module HllSets
     #   we reversed the BitVector to make integer smaller
     #--------------------------------------------------
     function Base.dump(x::HllSet{P}) where {P}
+        # Base.depwarn("dump(hll::HllSet{P}) is deprecated, use getcounts(x::Int; P::Int=10) instead.", :getbin)
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have dump for P ∈ 4:18")

@@ -26,3 +26,19 @@ Manifest.toml
 
 # Python venvs
 venv/
+
+# Models
+distilbert-base-uncased-finetuned-cola/
+fine_tuned_gpt2/
+fine_tuned_gpt2_2024-09-09T08:51:50/
+fine_tuned_gpt2_2024-09-09T08:57:32/
+results/
+saved_model/
+saved_model_*/
+Z_Files/
+__pycache__/
+python_julia_mixed_env/
+distilbert-*/
+gpt2-wikitext2/
+test-clm/
+gpt2-*/

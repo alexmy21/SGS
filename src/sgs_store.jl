@@ -8,11 +8,8 @@ module Store
     using PyCall
     using CSV
     using DataFrames
-    using WordTokenizers
 
     using JSON3
-    using TextAnalysis
-    using WordTokenizers
     using Base.Threads
 
     # Define the data store and version control structures
@@ -87,7 +84,7 @@ module Store
     #   - cols: A vector of columns in df to be processed
     #   - p:    precision parameter for HllSet that defines the size of col_dataset
 
-    function ingest_df(r::PyObject, tokenizer, df::DataFrame, parent::String, cols::Vector; p::Int=10, chunk_size::Int=512000)
+    function ingest_df(r::PyObject, tokenizer::PyObject, df::DataFrame, parent::String, cols::Vector; p::Int=10, chunk_size::Int=512000)
         
         for column in cols    
             col_values  = df[:, column]
@@ -102,7 +99,7 @@ module Store
         end
     end
 
-    function ingest_df_column(r::PyObject, tokenizer, chunks, col_sha1::String; p::Int=10)
+    function ingest_df_column(r::PyObject, tokenizer::PyObject, chunks, col_sha1::String; p::Int=10)
         # start = time()
         col_dataset = zeros(2^p)
         col_json    = JSON3.write(col_dataset)
@@ -117,7 +114,7 @@ module Store
                             if value !== missing && value !== nothing
                                 str_value   = string(value)
                                 str_value   = String(str_value)                               
-                                tokens      = tokenizer(str_value)
+                                tokens      = tokenizer.tokenize(str_value)
                                 append!(local_batch, tokens)
                             end
                         end

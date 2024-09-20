@@ -458,7 +458,7 @@ module HllSets
     # restore function
     #   Assumes that integers in vector are generated from reversed bit-vectors 
     #--------------------------------------------------
-    function restore(z::HllSet{P}, x::Vector{UInt32}) where {P} 
+    function restore!(z::HllSet{P}, x::Vector{UInt32}) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have restore for P ∈ 4:18")
@@ -473,7 +473,7 @@ module HllSets
         return z
     end
 
-    function restore(z::HllSet{P}, x::String) where {P}
+    function restore!(z::HllSet{P}, x::String) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have restore for P ∈ 4:18")

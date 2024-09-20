@@ -478,8 +478,12 @@ module HllSets
         if P < 4 || P > 18
             error("We only have restore for P ∈ 4:18")
         end
-        dataset = JSON3.read(x, Vector{UInt})
-        return dataset
+        dataset = JSON3.read(x, Vector{UInt32})
+        
+        @inbounds for i in 1:length(x)
+            z.counts[i] = x[i]
+        end
+        return z
     end     
 
     function u_hash(x; seed::Int=0) 

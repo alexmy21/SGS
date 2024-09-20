@@ -1,5 +1,9 @@
+import torch
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader, Dataset
+
+from transformers import RobertaTokenizer, RobertaModel
+import gc
 
 class GenericTokenizer:
     def __init__(self, model_name):
@@ -7,16 +11,17 @@ class GenericTokenizer:
     
     def tokenize(self, text):
         # Tokenize the text and return tokenized tokens as a string collection
-        tokens = self.tokenizer.tokenize(text)
-        return tokens
+        return self.tokenizer.tokenize(text)
     
 class BertTokenizerWrapper(GenericTokenizer):
     def __init__(self):
         super().__init__('bert-base-uncased')
 
 class RobertaTokenizerWrapper(GenericTokenizer):
+    # def __init__(self):
+    #     super().__init__('roberta-base')s
     def __init__(self):
-        super().__init__('roberta-base')
+        self.tokenizer = RobertaTokenizer.from_pretrained('roberta-base')        
 
 class GPT2TokenizerWrapper(GenericTokenizer):
     def __init__(self):

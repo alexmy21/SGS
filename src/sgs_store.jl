@@ -104,33 +104,34 @@ module Store
         col_dataset = zeros(2^p)
         col_json    = JSON3.write(col_dataset)
 
-        Threads.@sync begin 
-            for chunk in chunks
-                try
-                    Threads.@spawn begin                    
-                        # @info "$(chunk): Spawned $(time() - start)"
-                        local_batch = Vector{String}()
-                        for value in chunk
-                            if value !== missing && value !== nothing
-                                str_value   = string(value)
-                                str_value   = String(str_value)                               
-                                tokens      = tokenizer.tokenize(str_value)
-                                append!(local_batch, tokens)
-                            end
+        # Threads.@sync begin 
+        for chunk in chunks
+            try
+                Threads.@spawn begin                    
+                    # @info "$(chunk): Spawned $(time() - start)"
+                    local_batch = Vector{String}()
+                    for value in chunk
+                        if value !== missing && value !== nothing
+                            str_value   = string(value)
+                            str_value   = String(str_value)                               
+                            tokens      = tokenizer.tokenize(str_value)
+                            append!(local_batch, tokens)
                         end
-                        if !isempty(local_batch) 
-                            unique_tokens   = Set(local_batch)
-                            tokens          = JSON3.write(collect(unique_tokens))
-                            result_json     = r.fcall("ingest_01", 2, "", col_sha1, p, tokens)
-                            col_json        = r.fcall("bit_ops", 0, col_json, result_json, "OR")                        
-                        end
-                        # @info "$(chunk): Finished $(time() - start)"
                     end
-                catch e 
-                    println("chunk: ", chunk)
+                    if !isempty(local_batch) 
+                        unique_tokens   = Set(local_batch)
+                        tokens          = JSON3.write(collect(unique_tokens))
+                        # println("tokens: ", tokens)
+                        result_json     = r.fcall("ingest_01", 2, "", col_sha1, p, tokens)
+                        col_json        = r.fcall("bit_ops", 0, col_json, result_json, "OR")                        
+                    end
+                    # @info "$(chunk): Finished $(time() - start)"
                 end
+            catch e 
+                println("chunk: ", chunk)
             end
         end
+        # end
         # println(col_json)
         return JSON3.read(col_json)
     end

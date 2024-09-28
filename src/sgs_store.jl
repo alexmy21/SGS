@@ -137,4 +137,8 @@ module Store
         # println(col_json)
         return JSON3.read(col_json)
     end
+
+    function ingest_df_rows(r::PyObject, tokenizer::PyObject, chunk, row_sha1::String; p::Int=10)
+        println("processing row . . .")
+    end
 end

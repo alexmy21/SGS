@@ -299,6 +299,34 @@ class ExtendedGPT2Tokenizer(GPT2Tokenizer):
             for i, similarity in enumerate(similarities[0])
             if similarity > threshold
         ]
+        
+    def get_related_tokens(self, indices):
+        # Step 1: Call the search function to get the indices of relevant HLL sets
+        # indices = self.search(query, threshold)
+        
+        # Step 2: Retrieve the HLL sets from tensor_2 using the indices
+        relevant_hllsets = self.tensor_2[indices]
+        
+        # Step 3: Collect token IDs from tensor_1
+        token_ids = []
+        for hllset in relevant_hllsets:
+            print(f"Processing hllset (1): {hllset}")  # Debug print
+            # Extract the last 16 elements
+            hllset = hllset[-self.num_bins:]
+            print(f"Processing hllset (2): {hllset}")  # Debug print
+
+            # Apply hlltensor_to_tensor to retrieve the slice of tensor_1
+            tensor_slice = self.hlltensor_to_tensor(hllset)
+            
+            # Extract token_id from each row in the tensor_slice
+            for row in tensor_slice:
+                token_id = row[0].item()
+                token_ids.append(token_id)
+        
+        # Step 4: Retrieve tokens associated with the token IDs
+        tokens = [self.decode([token_id]) for token_id in token_ids]
+        
+        return tokens
 
     def generate_text(self, tokens, num_suggestions=3):
         
@@ -342,6 +370,8 @@ class ExtendedGPT2Tokenizer(GPT2Tokenizer):
             index = self.tensor_0[hllset_id]
             print(f"index: {index}")
             community_hllset = self.tensor_2[index - 1]
+            print(f"community_hllset: {community_hllset}")
+            community_hllset = community_hllset[-self.num_bins:]
             community_hllsets.append(community_hllset)
 
         for text in generated_texts:
